@@ -3,1388 +3,1483 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>UGA Spanish 2001 — Vocabulary Study App</title>
+  <title>UGA Spanish 2001 — Quizlet Learn</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
   <script>
     tailwind.config = {
       theme: {
         extend: {
           fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
           colors: {
-            uga: {
-              red: '#BA0C2F',
-              'red-dark': '#8B0A24',
-              black: '#000000',
-              white: '#FFFFFF',
-              bone: '#F2F0EB',
-              grey: '#808080',
-            }
+            uga: { red: '#BA0C2F', 'red-dark': '#8B0A24', black: '#000000', bone: '#F2F0EB' }
           }
         }
       }
     }
   </script>
   <style>
-    * { box-sizing: border-box; }
-    body { font-family: 'Inter', system-ui, sans-serif; background: #0a0a0a; color: #f5f5f5; }
-    .card-flip { perspective: 1000px; }
-    .card-flip-inner { transition: transform 0.5s; transform-style: preserve-3d; position: relative; }
-    .card-flip-inner.flipped { transform: rotateY(180deg); }
-    .card-face { backface-visibility: hidden; position: absolute; inset: 0; }
-    .card-back { transform: rotateY(180deg); }
-    @keyframes slideIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
-    .animate-slide-in { animation: slideIn 0.3s ease-out; }
-    .animate-pulse-slow { animation: pulse 2s ease-in-out infinite; }
-    .progress-bar-fill { transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: #1a1a1a; }
-    ::-webkit-scrollbar-thumb { background: #BA0C2F; border-radius: 3px; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: #050507; color: #f5f5f5; margin: 0; }
+    @keyframes fadeUp    { from { opacity:0; transform:translateY(16px) } to { opacity:1; transform:translateY(0) } }
+    @keyframes fadeIn    { from { opacity:0 } to { opacity:1 } }
+    @keyframes scaleIn   { from { opacity:0; transform:scale(.92) } to { opacity:1; transform:scale(1) } }
+    @keyframes shake     { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)} }
+    @keyframes popIn     { 0%{transform:scale(0)} 60%{transform:scale(1.15)} 100%{transform:scale(1)} }
+    @keyframes spin      { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+    .anim-fade-up  { animation: fadeUp .35s ease-out both }
+    .anim-fade-in  { animation: fadeIn .25s ease-out both }
+    .anim-scale-in { animation: scaleIn .3s ease-out both }
+    .anim-shake    { animation: shake .45s ease-in-out }
+    .anim-pop      { animation: popIn .4s ease-out both }
+    .anim-spin     { animation: spin .8s linear infinite }
+    .bar-fill { transition: width .7s cubic-bezier(.4,0,.2,1); }
+    ::-webkit-scrollbar { width:5px } ::-webkit-scrollbar-track { background:#111 } ::-webkit-scrollbar-thumb { background:#BA0C2F; border-radius:3px }
+    input::placeholder { color: rgba(255,255,255,.25) }
+    @keyframes toastIn  { from { opacity:0; transform:translateY(-12px) scale(.95) } to { opacity:1; transform:translateY(0) scale(1) } }
+    @keyframes toastOut { from { opacity:1; transform:translateY(0) } to { opacity:0; transform:translateY(-12px) } }
+    .toast-in  { animation: toastIn .25s ease-out both }
+    .toast-out { animation: toastOut .2s ease-in both }
   </style>
 </head>
 <body>
-  <div id="root"></div>
+<div id="root"></div>
 
-  <script type="text/babel">
-    const { useState, useEffect, useCallback, useMemo, useRef } = React;
+<script type="text/babel">
+const { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext } = React;
 
-    // ═══════════════════════════════════════════════════════════════
-    // DATA: Complete parsed vocabulary from Spanish 2001 Midterm PDF
-    // ═══════════════════════════════════════════════════════════════
-    const VOCABULARY_DATA = [
-      // ── Physical Appearance ──
-      { id: 1, term: "los anteojos", definition: "glasses", category: "Physical Appearance" },
-      { id: 2, term: "la apariencia", definition: "appearance", category: "Physical Appearance" },
-      { id: 3, term: "la barba", definition: "beard", category: "Physical Appearance" },
-      { id: 4, term: "el bigote", definition: "mustache", category: "Physical Appearance" },
-      { id: 5, term: "las canas", definition: "grey hair", category: "Physical Appearance" },
-      { id: 6, term: "la cicatriz", definition: "scar", category: "Physical Appearance" },
-      { id: 7, term: "la imagen", definition: "image", category: "Physical Appearance" },
-      { id: 8, term: "el lunar", definition: "mole", category: "Physical Appearance" },
-      { id: 9, term: "los ojos", definition: "eyes", category: "Physical Appearance" },
-      { id: 10, term: "las pecas", definition: "freckles", category: "Physical Appearance" },
-      { id: 11, term: "el pelo", definition: "hair", category: "Physical Appearance" },
-      { id: 12, term: "pelo castaño", definition: "light brown, chestnut hair", category: "Physical Appearance" },
-      { id: 13, term: "pelo gris/blanco", definition: "gray/white hair", category: "Physical Appearance" },
-      { id: 14, term: "pelo lacio/liso", definition: "straight hair", category: "Physical Appearance" },
-      { id: 15, term: "pelo ondulado", definition: "curly hair", category: "Physical Appearance" },
-      { id: 16, term: "pelo rubio", definition: "blond hair", category: "Physical Appearance" },
-      { id: 17, term: "el rostro (la cara)", definition: "face", category: "Physical Appearance" },
-      { id: 18, term: "la sonrisa", definition: "smile", category: "Physical Appearance" },
-      { id: 19, term: "llevar brackets", definition: "to wear braces", category: "Physical Appearance" },
-      { id: 20, term: "llevar lentes de contacto", definition: "to wear contact lenses", category: "Physical Appearance" },
-      { id: 21, term: "ser/estar calvo/a", definition: "to be bald", category: "Physical Appearance" },
-      { id: 22, term: "ser pelirrojo/a", definition: "to be a redhead", category: "Physical Appearance" },
+/* ═══════════════════════ TOAST SYSTEM ═══════════════════════ */
+const ToastCtx = createContext({ addToast: () => {} });
+let _toastId = 0;
+function ToastProvider({ children }) {
+  const [toasts, setToasts] = useState([]);
+  const addToast = useCallback((message, type = "error", duration = 4500) => {
+    const id = ++_toastId;
+    setToasts(prev => [...prev.slice(-4), { id, message, type, leaving: false }]);
+    setTimeout(() => {
+      setToasts(prev => prev.map(t => t.id === id ? { ...t, leaving: true } : t));
+      setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 250);
+    }, duration);
+  }, []);
+  return React.createElement(ToastCtx.Provider, { value: { addToast } },
+    children,
+    React.createElement("div", { className: "fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none", style: { maxWidth: "360px" } },
+      toasts.map(t => React.createElement("div", {
+        key: t.id,
+        className: `pointer-events-auto px-4 py-3 rounded-xl border text-sm font-medium shadow-xl backdrop-blur-lg ${
+          t.leaving ? "toast-out" : "toast-in"
+        } ${
+          t.type === "error" ? "bg-red-900/80 border-red-700/60 text-red-200" :
+          t.type === "warn"  ? "bg-amber-900/80 border-amber-700/60 text-amber-200" :
+                                "bg-emerald-900/80 border-emerald-700/60 text-emerald-200"
+        }`
+      }, t.type === "error" ? "⚠ " : t.type === "warn" ? "⚡ " : "✓ ", t.message))
+    )
+  );
+}
 
-      // ── Personality ──
-      { id: 23, term: "el carácter / la forma de ser", definition: "personality", category: "Personality" },
-      { id: 24, term: "tener buen/mal carácter", definition: "to have nice/unfriendly personality", category: "Personality" },
-      { id: 25, term: "antipático/a", definition: "unfriendly", category: "Personality" },
-      { id: 26, term: "callado/a", definition: "quiet", category: "Personality" },
-      { id: 27, term: "cariñoso/a", definition: "affectionate", category: "Personality" },
-      { id: 28, term: "chistoso/a", definition: "funny", category: "Personality" },
-      { id: 29, term: "conservador/a", definition: "conservative", category: "Personality" },
-      { id: 30, term: "egoísta", definition: "egotistic", category: "Personality" },
-      { id: 31, term: "mentiroso/a", definition: "a liar", category: "Personality" },
-      { id: 32, term: "sensato/a", definition: "sensible", category: "Personality" },
-      { id: 33, term: "sensible", definition: "sensitive", category: "Personality" },
-      { id: 34, term: "tacaño/a", definition: "stingy", category: "Personality" },
-      { id: 35, term: "terco/a", definition: "stubborn", category: "Personality" },
-      { id: 36, term: "tímido", definition: "shy", category: "Personality" },
-      { id: 37, term: "simpático/a", definition: "friendly", category: "Personality" },
-      { id: 38, term: "hablador/a", definition: "talkative", category: "Personality" },
-      { id: 39, term: "frío/a", definition: "cold", category: "Personality" },
-      { id: 40, term: "serio/a", definition: "serious", category: "Personality" },
-      { id: 41, term: "progresista", definition: "progressive", category: "Personality" },
-      { id: 42, term: "modesto/a", definition: "modest", category: "Personality" },
-      { id: 43, term: "honesto/a", definition: "honest", category: "Personality" },
-      { id: 44, term: "insensato/a", definition: "foolish", category: "Personality" },
-      { id: 45, term: "insensible", definition: "insensitive", category: "Personality" },
-      { id: 46, term: "generoso/a", definition: "generous", category: "Personality" },
-      { id: 47, term: "flexible", definition: "flexible", category: "Personality" },
-      { id: 48, term: "extrovertido/a", definition: "extroverted", category: "Personality" },
-      { id: 49, term: "pesado/a", definition: "dull, bothersome, annoying", category: "Personality" },
-      { id: 50, term: "tonto/a", definition: "dumb, silly", category: "Personality" },
+/* ══════════════════════════════════════════════════════════════════
+   ██  SUPABASE CONFIG — Replace with YOUR project values         ██
+   ══════════════════════════════════════════════════════════════════ */
+const SUPABASE_URL  = "https://nyzmjfnuxwhitefcgzzs.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55em1qZm51eHdoaXRlZmNnenpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0MjE0NjQsImV4cCI6MjA4Nzk5NzQ2NH0.vV7odzpP9yFW5pKq-onZDcS8SIKyuxu2foNgMjalguo";
 
-      // ── Religion ──
-      { id: 51, term: "el/la ateo/a", definition: "atheist", category: "Religion" },
-      { id: 52, term: "el bautismo", definition: "baptism", category: "Religion" },
-      { id: 53, term: "las creencias (religiosas)", definition: "(religious) beliefs", category: "Religion" },
-      { id: 54, term: "la fe", definition: "faith", category: "Religion" },
-      { id: 55, term: "el judaísmo", definition: "Judaism", category: "Religion" },
-      { id: 56, term: "el/la judío/a", definition: "Jew", category: "Religion" },
-      { id: 57, term: "el musulmán / la musulmana", definition: "muslim", category: "Religion" },
-      { id: 58, term: "la oración", definition: "prayer", category: "Religion" },
-      { id: 59, term: "el rito", definition: "ritual", category: "Religion" },
-      { id: 60, term: "el/la testigo de Jehová", definition: "Jehovah's Witness", category: "Religion" },
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-      // ── Politics ──
-      { id: 61, term: "el centro", definition: "center", category: "Politics" },
-      { id: 62, term: "el/la demócrata", definition: "democrat", category: "Politics" },
-      { id: 63, term: "el partido", definition: "party", category: "Politics" },
-      { id: 64, term: "el/la comunista", definition: "communist", category: "Politics" },
-      { id: 65, term: "la democracia", definition: "democracy", category: "Politics" },
-      { id: 66, term: "el/la republicano/a", definition: "republican", category: "Politics" },
-      { id: 67, term: "el/la socialista", definition: "socialist", category: "Politics" },
-      { id: 68, term: "apoyar", definition: "to support", category: "Politics" },
-      { id: 69, term: "democrático/a", definition: "democratic", category: "Politics" },
+/* ══════════════════════════════════════════════════════════════════
+   VOCABULARY DATA — 323 entries (embedded fallback; also in DB)
+   ══════════════════════════════════════════════════════════════════ */
+const VOCAB = [
+  {id:1,term:"los anteojos",definition:"glasses",cat:"Physical Appearance"},
+  {id:2,term:"la apariencia",definition:"appearance",cat:"Physical Appearance"},
+  {id:3,term:"la barba",definition:"beard",cat:"Physical Appearance"},
+  {id:4,term:"el bigote",definition:"mustache",cat:"Physical Appearance"},
+  {id:5,term:"las canas",definition:"grey hair",cat:"Physical Appearance"},
+  {id:6,term:"la cicatriz",definition:"scar",cat:"Physical Appearance"},
+  {id:7,term:"la imagen",definition:"image",cat:"Physical Appearance"},
+  {id:8,term:"el lunar",definition:"mole",cat:"Physical Appearance"},
+  {id:9,term:"los ojos",definition:"eyes",cat:"Physical Appearance"},
+  {id:10,term:"las pecas",definition:"freckles",cat:"Physical Appearance"},
+  {id:11,term:"el pelo",definition:"hair",cat:"Physical Appearance"},
+  {id:12,term:"pelo castaño",definition:"light brown, chestnut hair",cat:"Physical Appearance"},
+  {id:13,term:"pelo gris/blanco",definition:"gray/white hair",cat:"Physical Appearance"},
+  {id:14,term:"pelo lacio/liso",definition:"straight hair",cat:"Physical Appearance"},
+  {id:15,term:"pelo ondulado",definition:"curly hair",cat:"Physical Appearance"},
+  {id:16,term:"pelo rubio",definition:"blond hair",cat:"Physical Appearance"},
+  {id:17,term:"el rostro (la cara)",definition:"face",cat:"Physical Appearance"},
+  {id:18,term:"la sonrisa",definition:"smile",cat:"Physical Appearance"},
+  {id:19,term:"llevar brackets",definition:"to wear braces",cat:"Physical Appearance"},
+  {id:20,term:"llevar lentes de contacto",definition:"to wear contact lenses",cat:"Physical Appearance"},
+  {id:21,term:"ser/estar calvo/a",definition:"to be bald",cat:"Physical Appearance"},
+  {id:22,term:"ser pelirrojo/a",definition:"to be a redhead",cat:"Physical Appearance"},
+  {id:23,term:"el carácter / la forma de ser",definition:"personality",cat:"Personality"},
+  {id:24,term:"tener buen/mal carácter",definition:"to have nice/unfriendly personality",cat:"Personality"},
+  {id:25,term:"antipático/a",definition:"unfriendly",cat:"Personality"},
+  {id:26,term:"callado/a",definition:"quiet",cat:"Personality"},
+  {id:27,term:"cariñoso/a",definition:"affectionate",cat:"Personality"},
+  {id:28,term:"chistoso/a",definition:"funny",cat:"Personality"},
+  {id:29,term:"conservador/a",definition:"conservative",cat:"Personality"},
+  {id:30,term:"egoísta",definition:"egotistic",cat:"Personality"},
+  {id:31,term:"mentiroso/a",definition:"a liar",cat:"Personality"},
+  {id:32,term:"sensato/a",definition:"sensible",cat:"Personality"},
+  {id:33,term:"sensible",definition:"sensitive",cat:"Personality"},
+  {id:34,term:"tacaño/a",definition:"stingy",cat:"Personality"},
+  {id:35,term:"terco/a",definition:"stubborn",cat:"Personality"},
+  {id:36,term:"tímido",definition:"shy",cat:"Personality"},
+  {id:37,term:"simpático/a",definition:"friendly",cat:"Personality"},
+  {id:38,term:"hablador/a",definition:"talkative",cat:"Personality"},
+  {id:39,term:"frío/a",definition:"cold",cat:"Personality"},
+  {id:40,term:"serio/a",definition:"serious",cat:"Personality"},
+  {id:41,term:"progresista",definition:"progressive",cat:"Personality"},
+  {id:42,term:"modesto/a",definition:"modest",cat:"Personality"},
+  {id:43,term:"honesto/a",definition:"honest",cat:"Personality"},
+  {id:44,term:"insensato/a",definition:"foolish",cat:"Personality"},
+  {id:45,term:"insensible",definition:"insensitive",cat:"Personality"},
+  {id:46,term:"generoso/a",definition:"generous",cat:"Personality"},
+  {id:47,term:"flexible",definition:"flexible",cat:"Personality"},
+  {id:48,term:"extrovertido/a",definition:"extroverted",cat:"Personality"},
+  {id:49,term:"pesado/a",definition:"dull, bothersome, annoying",cat:"Personality"},
+  {id:50,term:"tonto/a",definition:"dumb, silly",cat:"Personality"},
+  {id:51,term:"el/la ateo/a",definition:"atheist",cat:"Religion"},
+  {id:52,term:"el bautismo",definition:"baptism",cat:"Religion"},
+  {id:53,term:"las creencias (religiosas)",definition:"(religious) beliefs",cat:"Religion"},
+  {id:54,term:"la fe",definition:"faith",cat:"Religion"},
+  {id:55,term:"el judaísmo",definition:"Judaism",cat:"Religion"},
+  {id:56,term:"el/la judío/a",definition:"Jew",cat:"Religion"},
+  {id:57,term:"el musulmán / la musulmana",definition:"muslim",cat:"Religion"},
+  {id:58,term:"la oración",definition:"prayer",cat:"Religion"},
+  {id:59,term:"el rito",definition:"ritual",cat:"Religion"},
+  {id:60,term:"el/la testigo de Jehová",definition:"Jehovah's Witness",cat:"Religion"},
+  {id:61,term:"el centro",definition:"center",cat:"Politics"},
+  {id:62,term:"el/la demócrata",definition:"democrat",cat:"Politics"},
+  {id:63,term:"el partido",definition:"party",cat:"Politics"},
+  {id:64,term:"el/la comunista",definition:"communist",cat:"Politics"},
+  {id:65,term:"la democracia",definition:"democracy",cat:"Politics"},
+  {id:66,term:"el/la republicano/a",definition:"republican",cat:"Politics"},
+  {id:67,term:"el/la socialista",definition:"socialist",cat:"Politics"},
+  {id:68,term:"apoyar",definition:"to support",cat:"Politics"},
+  {id:69,term:"democrático/a",definition:"democratic",cat:"Politics"},
+  {id:70,term:"la amistad",definition:"friendship",cat:"Relationships"},
+  {id:71,term:"el/la compañero/a de casa/cuarto",definition:"house/roommate",cat:"Relationships"},
+  {id:72,term:"el equipo",definition:"team",cat:"Relationships"},
+  {id:73,term:"el/la jugador/a",definition:"player",cat:"Relationships"},
+  {id:74,term:"el miembro",definition:"member",cat:"Relationships"},
+  {id:75,term:"formar parte de",definition:"to be/form part of",cat:"Relationships"},
+  {id:76,term:"pertenecer a",definition:"to belong to",cat:"Relationships"},
+  {id:77,term:"los apuntes / las notas",definition:"(class) notes",cat:"Education"},
+  {id:78,term:"el bachillerato",definition:"high school (studies)",cat:"Education"},
+  {id:79,term:"la beca",definition:"grant, fellowship, scholarship",cat:"Education"},
+  {id:80,term:"la calificación / la nota",definition:"grade",cat:"Education"},
+  {id:81,term:"el curso académico",definition:"academic year",cat:"Education"},
+  {id:82,term:"la facultad",definition:"department encompassing an entire discipline",cat:"Education"},
+  {id:83,term:"la fecha límite / el plazo",definition:"deadline",cat:"Education"},
+  {id:84,term:"el horario",definition:"schedule",cat:"Education"},
+  {id:85,term:"el informe escrito",definition:"paper",cat:"Education"},
+  {id:86,term:"la licenciatura",definition:"B.A. degree equivalent",cat:"Education"},
+  {id:87,term:"aprobar",definition:"to pass",cat:"Education"},
+  {id:88,term:"faltar a clase",definition:"to miss class",cat:"Education"},
+  {id:89,term:"suspender / reprobar",definition:"to fail",cat:"Education"},
+  {id:90,term:"las ciencias políticas",definition:"political science",cat:"Education"},
+  {id:91,term:"la contabilidad",definition:"accounting",cat:"Education"},
+  {id:92,term:"el derecho",definition:"law",cat:"Education"},
+  {id:93,term:"la enfermería",definition:"nursing",cat:"Education"},
+  {id:94,term:"la física",definition:"physics",cat:"Education"},
+  {id:95,term:"la informática",definition:"computer science",cat:"Education"},
+  {id:96,term:"la ingeniería",definition:"engineering",cat:"Education"},
+  {id:97,term:"las letras",definition:"letters (literature, language studies)",cat:"Education"},
+  {id:98,term:"el periodismo",definition:"journalism",cat:"Education"},
+  {id:99,term:"la química",definition:"chemistry",cat:"Education"},
+  {id:100,term:"el/la ahijado/a",definition:"godson/goddaughter",cat:"Family"},
+  {id:101,term:"el/la bisabuelo/a",definition:"great grandfather / great grandmother",cat:"Family"},
+  {id:102,term:"la familia política",definition:"in-laws",cat:"Family"},
+  {id:103,term:"el/la cuñado/a",definition:"brother-in-law / sister-in-law",cat:"Family"},
+  {id:104,term:"la nuera / el yerno",definition:"daughter-in-law / son-in-law",cat:"Family"},
+  {id:105,term:"el/la suegro/a",definition:"father-in-law / mother-in-law",cat:"Family"},
+  {id:106,term:"el/la hermanastro/a",definition:"stepbrother / stepsister",cat:"Family"},
+  {id:107,term:"el/la hijastro/a",definition:"stepson / stepdaughter",cat:"Family"},
+  {id:108,term:"la madrastra / el padrastro",definition:"stepmother / stepfather",cat:"Family"},
+  {id:109,term:"la madrina / el padrino",definition:"godmother / godfather",cat:"Family"},
+  {id:110,term:"el marido / la mujer",definition:"husband / wife",cat:"Family"},
+  {id:111,term:"el medio hermano / la media hermana",definition:"half-brother / half-sister",cat:"Family"},
+  {id:112,term:"el/la nieto/a",definition:"grandson / granddaughter",cat:"Family"},
+  {id:113,term:"el/la sobrino/a",definition:"nephew / niece",cat:"Family"},
+  {id:114,term:"materno/a",definition:"maternal (on the mother's side)",cat:"Family"},
+  {id:115,term:"paterno/a",definition:"paternal (on the father's side)",cat:"Family"},
+  {id:116,term:"el bautizo",definition:"baptism",cat:"Celebrations"},
+  {id:117,term:"la boda",definition:"wedding",cat:"Celebrations"},
+  {id:118,term:"el brindis",definition:"toast",cat:"Celebrations"},
+  {id:119,term:"el entierro",definition:"burial",cat:"Celebrations"},
+  {id:120,term:"la fecha",definition:"date",cat:"Celebrations"},
+  {id:121,term:"la felicitación",definition:"congratulations",cat:"Celebrations"},
+  {id:122,term:"el nacimiento",definition:"birth",cat:"Celebrations"},
+  {id:123,term:"la Pascua Florida",definition:"Easter",cat:"Celebrations"},
+  {id:124,term:"la Pascua Judía",definition:"Passover",cat:"Celebrations"},
+  {id:125,term:"la quinceañera",definition:"girl's 15th birthday party",cat:"Celebrations"},
+  {id:126,term:"bautizar",definition:"to baptize",cat:"Celebrations"},
+  {id:127,term:"brindar",definition:"to toast",cat:"Celebrations"},
+  {id:128,term:"enterrar",definition:"to bury",cat:"Celebrations"},
+  {id:129,term:"felicitar",definition:"to congratulate",cat:"Celebrations"},
+  {id:130,term:"nacer",definition:"to be born",cat:"Celebrations"},
+  {id:131,term:"el abrazo",definition:"hug",cat:"Family Life"},
+  {id:132,term:"la anécdota",definition:"story",cat:"Family Life"},
+  {id:133,term:"el apodo",definition:"nickname",cat:"Family Life"},
+  {id:134,term:"la bendición",definition:"blessing",cat:"Family Life"},
+  {id:135,term:"el beso",definition:"kiss",cat:"Family Life"},
+  {id:136,term:"el cariño",definition:"affection",cat:"Family Life"},
+  {id:137,term:"el hogar",definition:"home",cat:"Family Life"},
+  {id:138,term:"la herencia",definition:"inheritance; heritage",cat:"Family Life"},
+  {id:139,term:"la memoria",definition:"memory (ability to remember)",cat:"Family Life"},
+  {id:140,term:"el parecido",definition:"resemblance",cat:"Family Life"},
+  {id:141,term:"el recuerdo",definition:"memory (of one item); recollection",cat:"Family Life"},
+  {id:142,term:"amar",definition:"to love",cat:"Family Life"},
+  {id:143,term:"bendecir",definition:"to bless, give a blessing",cat:"Family Life"},
+  {id:144,term:"casarse (con)",definition:"to get married (to)",cat:"Family Life"},
+  {id:145,term:"crecer",definition:"to grow up",cat:"Family Life"},
+  {id:146,term:"enviar",definition:"to send",cat:"Family Life"},
+  {id:147,term:"estar unidos/distanciados",definition:"to be close / distant",cat:"Family Life"},
+  {id:148,term:"heredar",definition:"to inherit",cat:"Family Life"},
+  {id:149,term:"llevarse bien/mal",definition:"to get along well/poorly",cat:"Family Life"},
+  {id:150,term:"llorar",definition:"to cry",cat:"Family Life"},
+  {id:151,term:"mandar",definition:"to send",cat:"Family Life"},
+  {id:152,term:"mudarse (de/a)",definition:"to move (from/to an address)",cat:"Family Life"},
+  {id:153,term:"querer",definition:"to love",cat:"Family Life"},
+  {id:154,term:"el/la agricultor(a)",definition:"farmer",cat:"Jobs & Trades"},
+  {id:155,term:"el/la albañil",definition:"construction worker",cat:"Jobs & Trades"},
+  {id:156,term:"el/la basurero(a)",definition:"garbage collector",cat:"Jobs & Trades"},
+  {id:157,term:"el/la cocinero/a",definition:"cook",cat:"Jobs & Trades"},
+  {id:158,term:"el/la electricista",definition:"electrician",cat:"Jobs & Trades"},
+  {id:159,term:"el/la fontanero/a",definition:"plumber",cat:"Jobs & Trades"},
+  {id:160,term:"el/la jardinero/a",definition:"gardener",cat:"Jobs & Trades"},
+  {id:161,term:"el/la pintor(a)",definition:"painter",cat:"Jobs & Trades"},
+  {id:162,term:"el/la mecánico/a",definition:"mechanic",cat:"Jobs & Trades"},
+  {id:163,term:"las profesiones",definition:"professions",cat:"Professions"},
+  {id:164,term:"los oficios",definition:"jobs",cat:"Professions"},
+  {id:165,term:"el/la abogado/a",definition:"lawyer",cat:"Professions"},
+  {id:166,term:"el/la asistente de vuelo",definition:"flight attendant",cat:"Professions"},
+  {id:167,term:"el/la bibliotecario/a",definition:"librarian",cat:"Professions"},
+  {id:168,term:"el/la consultor(a)",definition:"consultant",cat:"Professions"},
+  {id:169,term:"el/la enfermero/a",definition:"nurse",cat:"Professions"},
+  {id:170,term:"el/la ingeniero/a",definition:"engineer",cat:"Professions"},
+  {id:171,term:"el/la maestro/a",definition:"teacher",cat:"Professions"},
+  {id:172,term:"el/la trabajador(a) social",definition:"social worker",cat:"Professions"},
+  {id:173,term:"el/la vendedor(a)",definition:"salesperson",cat:"Professions"},
+  {id:174,term:"los anuncios/avisos clasificados",definition:"classified ads",cat:"Job Search"},
+  {id:175,term:"la carta de interés / de recomendación",definition:"cover letter / letter of recommendation",cat:"Job Search"},
+  {id:176,term:"el currículum (vitae)",definition:"resume, CV",cat:"Job Search"},
+  {id:177,term:"el curso de perfeccionamiento/capacitación",definition:"training course",cat:"Job Search"},
+  {id:178,term:"la formación",definition:"education, training",cat:"Job Search"},
+  {id:179,term:"la solicitud",definition:"application",cat:"Job Search"},
+  {id:180,term:"formarse",definition:"to educate/train oneself",cat:"Job Search"},
+  {id:181,term:"el (período de) aprendizaje",definition:"learning/training (period)",cat:"Workplace"},
+  {id:182,term:"el ascenso",definition:"promotion",cat:"Workplace"},
+  {id:183,term:"el aumento (de sueldo)",definition:"(salary) increase; raise",cat:"Workplace"},
+  {id:184,term:"la capacidad de adaptarse",definition:"ability/capacity to adapt",cat:"Workplace"},
+  {id:185,term:"el contrato",definition:"contract",cat:"Workplace"},
+  {id:186,term:"el desempleo",definition:"unemployment",cat:"Workplace"},
+  {id:187,term:"el despido",definition:"lay-off; dismissal (from job)",cat:"Workplace"},
+  {id:188,term:"los días feriados",definition:"holidays",cat:"Workplace"},
+  {id:189,term:"el/la empleado/a",definition:"employee",cat:"Workplace"},
+  {id:190,term:"el/la empleador(a)",definition:"employer",cat:"Workplace"},
+  {id:191,term:"la empresa",definition:"corporation",cat:"Workplace"},
+  {id:192,term:"el éxito",definition:"success",cat:"Workplace"},
+  {id:193,term:"la firma",definition:"signature",cat:"Workplace"},
+  {id:194,term:"el fracaso",definition:"failure",cat:"Workplace"},
+  {id:195,term:"el/la gerente",definition:"manager, director",cat:"Workplace"},
+  {id:196,term:"la huelga",definition:"strike",cat:"Workplace"},
+  {id:197,term:"la guardería infantil",definition:"day-care center",cat:"Workplace"},
+  {id:198,term:"los impuestos",definition:"taxes",cat:"Workplace"},
+  {id:199,term:"la jubilación",definition:"retirement",cat:"Workplace"},
+  {id:200,term:"la licencia (por maternidad/matrimonio/enfermedad)",definition:"(maternity/marital/sick) leave",cat:"Workplace"},
+  {id:201,term:"la manifestación",definition:"demonstration",cat:"Workplace"},
+  {id:202,term:"el mercado",definition:"market",cat:"Workplace"},
+  {id:203,term:"la meta",definition:"goal",cat:"Workplace"},
+  {id:204,term:"la práctica laboral",definition:"internship",cat:"Workplace"},
+  {id:205,term:"el puesto",definition:"position",cat:"Workplace"},
+  {id:206,term:"la renuncia",definition:"resignation",cat:"Workplace"},
+  {id:207,term:"el seguro (de vida / médico / dental)",definition:"(life/medical/dental) insurance",cat:"Workplace"},
+  {id:208,term:"el sindicato",definition:"labor union",cat:"Workplace"},
+  {id:209,term:"el/la socio/a",definition:"partner",cat:"Workplace"},
+  {id:210,term:"ascender",definition:"to promote",cat:"Workplace"},
+  {id:211,term:"aumentar",definition:"to increase",cat:"Workplace"},
+  {id:212,term:"contratar",definition:"to contract",cat:"Workplace"},
+  {id:213,term:"despedir",definition:"to lay off, fire",cat:"Workplace"},
+  {id:214,term:"emplear",definition:"to employ",cat:"Workplace"},
+  {id:215,term:"estar desempleado/a",definition:"to be unemployed",cat:"Workplace"},
+  {id:216,term:"firmar",definition:"to sign",cat:"Workplace"},
+  {id:217,term:"jubilarse",definition:"to retire",cat:"Workplace"},
+  {id:218,term:"renunciar",definition:"to resign",cat:"Workplace"},
+  {id:219,term:"el aparato",definition:"appliance; machine",cat:"Media"},
+  {id:220,term:"la emisora de radio",definition:"radio station",cat:"Media"},
+  {id:221,term:"el/la locutor(a)",definition:"radio host",cat:"Media"},
+  {id:222,term:"el mensaje",definition:"message",cat:"Media"},
+  {id:223,term:"la noticia",definition:"piece of news",cat:"Media"},
+  {id:224,term:"las noticias",definition:"news",cat:"Media"},
+  {id:225,term:"el noticiero",definition:"news(cast); news program",cat:"Media"},
+  {id:226,term:"el periódico",definition:"newspaper",cat:"Media"},
+  {id:227,term:"el/la periodista",definition:"journalist",cat:"Media"},
+  {id:228,term:"la prensa",definition:"press; media",cat:"Media"},
+  {id:229,term:"el/la presentador(a)",definition:"TV host(ess); anchorperson",cat:"Media"},
+  {id:230,term:"el programa informativo",definition:"information program",cat:"Media"},
+  {id:231,term:"el reportaje",definition:"news report",cat:"Media"},
+  {id:232,term:"la revista",definition:"magazine",cat:"Media"},
+  {id:233,term:"el archivo",definition:"document",cat:"Technology"},
+  {id:234,term:"la arroba",definition:"@",cat:"Technology"},
+  {id:235,term:"la batería",definition:"battery",cat:"Technology"},
+  {id:236,term:"el buscador",definition:"search engine",cat:"Technology"},
+  {id:237,term:"el cargador",definition:"charger",cat:"Technology"},
+  {id:238,term:"la (computadora) portátil",definition:"laptop",cat:"Technology"},
+  {id:239,term:"el correo electrónico / e-mail",definition:"e-mail",cat:"Technology"},
+  {id:240,term:"la dirección de Internet",definition:"Internet address",cat:"Technology"},
+  {id:241,term:"el disco duro",definition:"hard drive",cat:"Technology"},
+  {id:242,term:"la impresora",definition:"printer",cat:"Technology"},
+  {id:243,term:"el lector electrónico",definition:"eReader",cat:"Technology"},
+  {id:244,term:"la página web",definition:"web page",cat:"Technology"},
+  {id:245,term:"la pantalla",definition:"screen",cat:"Technology"},
+  {id:246,term:"la Red / la Internet",definition:"Internet",cat:"Technology"},
+  {id:247,term:"la red social",definition:"social network",cat:"Technology"},
+  {id:248,term:"el reproductor de MP3",definition:"MP3 player",cat:"Technology"},
+  {id:249,term:"el servidor",definition:"server",cat:"Technology"},
+  {id:250,term:"el sitio web",definition:"web site",cat:"Technology"},
+  {id:251,term:"la tecla",definition:"key",cat:"Technology"},
+  {id:252,term:"el teclado",definition:"keyboard",cat:"Technology"},
+  {id:253,term:"el/la usuario/a",definition:"user",cat:"Technology"},
+  {id:254,term:"almacenar",definition:"to store",cat:"Technology"},
+  {id:255,term:"archivar",definition:"to file",cat:"Technology"},
+  {id:256,term:"borrar",definition:"to erase",cat:"Technology"},
+  {id:257,term:"buscar",definition:"to look for; to search",cat:"Technology"},
+  {id:258,term:"enviar (un fax / un mensaje)",definition:"to send (a fax/message)",cat:"Technology"},
+  {id:259,term:"funcionar",definition:"to function, work",cat:"Technology"},
+  {id:260,term:"grabar",definition:"to record",cat:"Technology"},
+  {id:261,term:"guardar",definition:"to save",cat:"Technology"},
+  {id:262,term:"hacer una búsqueda",definition:"to look for; to search",cat:"Technology"},
+  {id:263,term:"hacer clic",definition:"to click",cat:"Technology"},
+  {id:264,term:"imprimir",definition:"to print",cat:"Technology"},
+  {id:265,term:"pulsar",definition:"to click",cat:"Technology"},
+  {id:266,term:"el aislamiento",definition:"isolation",cat:"Society"},
+  {id:267,term:"el punto",definition:"dot",cat:"Society"},
+  {id:268,term:"la sigla",definition:"(capital) letter used to abbreviate a name",cat:"Society"},
+  {id:269,term:"la soledad",definition:"solitude; loneliness",cat:"Society"},
+  {id:270,term:"la ventaja",definition:"advantage",cat:"Society"},
+  {id:271,term:"aislarse",definition:"to isolate (oneself)",cat:"Society"},
+  {id:272,term:"cara a cara",definition:"face to face",cat:"Society"},
+  {id:273,term:"el bienestar",definition:"well-being",cat:"Lifestyle"},
+  {id:274,term:"el entretenimiento",definition:"entertainment; pastime",cat:"Lifestyle"},
+  {id:275,term:"el nivel de vida",definition:"standard of living",cat:"Lifestyle"},
+  {id:276,term:"el ocio",definition:"leisure",cat:"Lifestyle"},
+  {id:277,term:"el pasatiempo",definition:"pastime",cat:"Lifestyle"},
+  {id:278,term:"el ritmo de la vida",definition:"pace of life",cat:"Lifestyle"},
+  {id:279,term:"disfrutar/gozar",definition:"to enjoy",cat:"Lifestyle"},
+  {id:280,term:"entretener(se)",definition:"to entertain (oneself)",cat:"Lifestyle"},
+  {id:281,term:"pasarlo bien",definition:"to have a good time",cat:"Lifestyle"},
+  {id:282,term:"relajarse",definition:"to relax",cat:"Lifestyle"},
+  {id:283,term:"el baile",definition:"dance",cat:"Leisure"},
+  {id:284,term:"la calle",definition:"street",cat:"Leisure"},
+  {id:285,term:"el chiste",definition:"joke",cat:"Leisure"},
+  {id:286,term:"la discoteca",definition:"disco, dance club",cat:"Leisure"},
+  {id:287,term:"la feria",definition:"fair",cat:"Leisure"},
+  {id:288,term:"el paseo",definition:"stroll",cat:"Leisure"},
+  {id:289,term:"la piscina",definition:"swimming pool",cat:"Leisure"},
+  {id:290,term:"la playa",definition:"beach",cat:"Leisure"},
+  {id:291,term:"la plaza",definition:"square",cat:"Leisure"},
+  {id:292,term:"alquilar películas",definition:"to rent movies",cat:"Leisure"},
+  {id:293,term:"bailar",definition:"to dance",cat:"Leisure"},
+  {id:294,term:"bañarse/nadar",definition:"to swim",cat:"Leisure"},
+  {id:295,term:"charlar/platicar",definition:"to chat, converse",cat:"Leisure"},
+  {id:296,term:"contar un chiste",definition:"to tell a joke",cat:"Leisure"},
+  {id:297,term:"hacer una barbacoa",definition:"to have a barbecue",cat:"Leisure"},
+  {id:298,term:"hacer un crucigrama",definition:"to do a crossword puzzle",cat:"Leisure"},
+  {id:299,term:"ir al cine / al teatro / a un concierto",definition:"to go to the movies / the theater / a concert",cat:"Leisure"},
+  {id:300,term:"jugar al dominó / al ajedrez",definition:"to play dominoes / chess",cat:"Leisure"},
+  {id:301,term:"pasear",definition:"to stroll",cat:"Leisure"},
+  {id:302,term:"trasnochar",definition:"to stay up all night",cat:"Leisure"},
+  {id:303,term:"la botella",definition:"bottle (of water, beer, wine)",cat:"Dining"},
+  {id:304,term:"el comedor",definition:"dining room/hall",cat:"Dining"},
+  {id:305,term:"la copa",definition:"wine glass",cat:"Dining"},
+  {id:306,term:"la cuchara",definition:"spoon",cat:"Dining"},
+  {id:307,term:"la cucharita",definition:"teaspoon",cat:"Dining"},
+  {id:308,term:"el cuchillo",definition:"knife",cat:"Dining"},
+  {id:309,term:"el cuenco",definition:"soup bowl",cat:"Dining"},
+  {id:310,term:"la pimienta",definition:"pepper",cat:"Dining"},
+  {id:311,term:"el plato",definition:"dish",cat:"Dining"},
+  {id:312,term:"la sal",definition:"salt",cat:"Dining"},
+  {id:313,term:"la servilleta (de papel)",definition:"(paper) napkin",cat:"Dining"},
+  {id:314,term:"la taza",definition:"cup",cat:"Dining"},
+  {id:315,term:"el tenedor",definition:"fork",cat:"Dining"},
+  {id:316,term:"el vaso",definition:"glass",cat:"Dining"},
+  {id:317,term:"la vela (encendida)",definition:"(lit) candle",cat:"Dining"},
+  {id:318,term:"invitar",definition:"to invite; to treat (offer to pay)",cat:"Dining"},
+  {id:319,term:"oler a",definition:"to smell like",cat:"Dining"},
+  {id:320,term:"probar",definition:"to taste",cat:"Dining"},
+  {id:321,term:"saber a",definition:"to taste like",cat:"Dining"},
+  {id:322,term:"¡Buen apetito/provecho!",definition:"Enjoy your meal!",cat:"Dining"},
+  {id:323,term:"¡Qué rico/sabroso/malo!",definition:"How delicious/tasty/awful!",cat:"Dining"},
+];
 
-      // ── Relationships ──
-      { id: 70, term: "la amistad", definition: "friendship", category: "Relationships" },
-      { id: 71, term: "el/la compañero/a de casa/cuarto", definition: "house/roommate", category: "Relationships" },
-      { id: 72, term: "el equipo", definition: "team", category: "Relationships" },
-      { id: 73, term: "el/la jugador/a", definition: "player", category: "Relationships" },
-      { id: 74, term: "el miembro", definition: "member", category: "Relationships" },
-      { id: 75, term: "formar parte de", definition: "to be/form part of", category: "Relationships" },
-      { id: 76, term: "pertenecer a", definition: "to belong to", category: "Relationships" },
+const CATEGORIES = [...new Set(VOCAB.map(v => v.cat))];
 
-      // ── Education ──
-      { id: 77, term: "los apuntes / las notas", definition: "(class) notes", category: "Education" },
-      { id: 78, term: "el bachillerato", definition: "high school (studies)", category: "Education" },
-      { id: 79, term: "la beca", definition: "grant, fellowship, scholarship", category: "Education" },
-      { id: 80, term: "la calificación / la nota", definition: "grade", category: "Education" },
-      { id: 81, term: "el curso académico", definition: "academic year", category: "Education" },
-      { id: 82, term: "la facultad", definition: "department encompassing an entire discipline", category: "Education" },
-      { id: 83, term: "la fecha límite / el plazo", definition: "deadline", category: "Education" },
-      { id: 84, term: "el horario", definition: "schedule", category: "Education" },
-      { id: 85, term: "el informe escrito", definition: "paper", category: "Education" },
-      { id: 86, term: "la licenciatura", definition: "B.A. degree equivalent", category: "Education" },
-      { id: 87, term: "aprobar", definition: "to pass", category: "Education" },
-      { id: 88, term: "faltar a clase", definition: "to miss class", category: "Education" },
-      { id: 89, term: "suspender / reprobar", definition: "to fail", category: "Education" },
-      { id: 90, term: "las ciencias políticas", definition: "political science", category: "Education" },
-      { id: 91, term: "la contabilidad", definition: "accounting", category: "Education" },
-      { id: 92, term: "el derecho", definition: "law", category: "Education" },
-      { id: 93, term: "la enfermería", definition: "nursing", category: "Education" },
-      { id: 94, term: "la física", definition: "physics", category: "Education" },
-      { id: 95, term: "la informática", definition: "computer science", category: "Education" },
-      { id: 96, term: "la ingeniería", definition: "engineering", category: "Education" },
-      { id: 97, term: "las letras", definition: "letters (literature, language studies)", category: "Education" },
-      { id: 98, term: "el periodismo", definition: "journalism", category: "Education" },
-      { id: 99, term: "la química", definition: "chemistry", category: "Education" },
+/* ═══════════════════════ HELPERS ═══════════════════════ */
+function shuffle(a) {
+  const b = [...a];
+  for (let i = b.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [b[i], b[j]] = [b[j], b[i]];
+  }
+  return b;
+}
 
-      // ── Family ──
-      { id: 100, term: "el/la ahijado/a", definition: "godson/goddaughter", category: "Family" },
-      { id: 101, term: "el/la bisabuelo/a", definition: "great grandfather / great grandmother", category: "Family" },
-      { id: 102, term: "la familia política", definition: "in-laws", category: "Family" },
-      { id: 103, term: "el/la cuñado/a", definition: "brother-in-law / sister-in-law", category: "Family" },
-      { id: 104, term: "la nuera / el yerno", definition: "daughter-in-law / son-in-law", category: "Family" },
-      { id: 105, term: "el/la suegro/a", definition: "father-in-law / mother-in-law", category: "Family" },
-      { id: 106, term: "el/la hermanastro/a", definition: "stepbrother / stepsister", category: "Family" },
-      { id: 107, term: "el/la hijastro/a", definition: "stepson / stepdaughter", category: "Family" },
-      { id: 108, term: "la madrastra / el padrastro", definition: "stepmother / stepfather", category: "Family" },
-      { id: 109, term: "la madrina / el padrino", definition: "godmother / godfather", category: "Family" },
-      { id: 110, term: "el marido / la mujer", definition: "husband / wife", category: "Family" },
-      { id: 111, term: "el medio hermano / la media hermana", definition: "half-brother / half-sister", category: "Family" },
-      { id: 112, term: "el/la nieto/a", definition: "grandson / granddaughter", category: "Family" },
-      { id: 113, term: "el/la sobrino/a", definition: "nephew / niece", category: "Family" },
-      { id: 114, term: "materno/a", definition: "maternal (on the mother's side)", category: "Family" },
-      { id: 115, term: "paterno/a", definition: "paternal (on the father's side)", category: "Family" },
+function stripAccents(s) {
+  return s.replace(/ñ/g, "n").replace(/Ñ/g, "N")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
 
-      // ── Celebrations ──
-      { id: 116, term: "el bautizo", definition: "baptism", category: "Celebrations" },
-      { id: 117, term: "la boda", definition: "wedding", category: "Celebrations" },
-      { id: 118, term: "el brindis", definition: "toast", category: "Celebrations" },
-      { id: 119, term: "el entierro", definition: "burial", category: "Celebrations" },
-      { id: 120, term: "la fecha", definition: "date", category: "Celebrations" },
-      { id: 121, term: "la felicitación", definition: "congratulations", category: "Celebrations" },
-      { id: 122, term: "el nacimiento", definition: "birth", category: "Celebrations" },
-      { id: 123, term: "la Pascua Florida", definition: "Easter", category: "Celebrations" },
-      { id: 124, term: "la Pascua Judía", definition: "Passover", category: "Celebrations" },
-      { id: 125, term: "la quinceañera", definition: "girl's 15th birthday party", category: "Celebrations" },
-      { id: 126, term: "bautizar", definition: "to baptize", category: "Celebrations" },
-      { id: 127, term: "brindar", definition: "to toast", category: "Celebrations" },
-      { id: 128, term: "enterrar", definition: "to bury", category: "Celebrations" },
-      { id: 129, term: "felicitar", definition: "to congratulate", category: "Celebrations" },
-      { id: 130, term: "nacer", definition: "to be born", category: "Celebrations" },
+function diffIsAccentsOnly(input, correct) {
+  return stripAccents(input.toLowerCase()) === stripAccents(correct.toLowerCase())
+    && input.toLowerCase() !== correct.toLowerCase();
+}
 
-      // ── Family Life ──
-      { id: 131, term: "el abrazo", definition: "hug", category: "Family Life" },
-      { id: 132, term: "la anécdota", definition: "story", category: "Family Life" },
-      { id: 133, term: "el apodo", definition: "nickname", category: "Family Life" },
-      { id: 134, term: "la bendición", definition: "blessing", category: "Family Life" },
-      { id: 135, term: "el beso", definition: "kiss", category: "Family Life" },
-      { id: 136, term: "el cariño", definition: "affection", category: "Family Life" },
-      { id: 137, term: "el hogar", definition: "home", category: "Family Life" },
-      { id: 138, term: "la herencia", definition: "inheritance; heritage", category: "Family Life" },
-      { id: 139, term: "la memoria", definition: "memory (ability to remember)", category: "Family Life" },
-      { id: 140, term: "el parecido", definition: "resemblance", category: "Family Life" },
-      { id: 141, term: "el recuerdo", definition: "memory (of one item); recollection", category: "Family Life" },
-      { id: 142, term: "amar", definition: "to love", category: "Family Life" },
-      { id: 143, term: "bendecir", definition: "to bless, give a blessing", category: "Family Life" },
-      { id: 144, term: "casarse (con)", definition: "to get married (to)", category: "Family Life" },
-      { id: 145, term: "crecer", definition: "to grow up", category: "Family Life" },
-      { id: 146, term: "enviar", definition: "to send", category: "Family Life" },
-      { id: 147, term: "estar unidos/distanciados", definition: "to be close / distant", category: "Family Life" },
-      { id: 148, term: "heredar", definition: "to inherit", category: "Family Life" },
-      { id: 149, term: "llevarse bien/mal", definition: "to get along well/poorly", category: "Family Life" },
-      { id: 150, term: "llorar", definition: "to cry", category: "Family Life" },
-      { id: 151, term: "mandar", definition: "to send", category: "Family Life" },
-      { id: 152, term: "mudarse (de/a)", definition: "to move (from/to an address)", category: "Family Life" },
-      { id: 153, term: "querer", definition: "to love", category: "Family Life" },
+/* ═══════════════════════ AUTH CONTEXT ═══════════════════════ */
+const AuthCtx = createContext({ user: null, loading: true });
 
-      // ── Jobs & Trades ──
-      { id: 154, term: "el/la agricultor(a)", definition: "farmer", category: "Jobs & Trades" },
-      { id: 155, term: "el/la albañil", definition: "construction worker", category: "Jobs & Trades" },
-      { id: 156, term: "el/la basurero(a)", definition: "garbage collector", category: "Jobs & Trades" },
-      { id: 157, term: "el/la cocinero/a", definition: "cook", category: "Jobs & Trades" },
-      { id: 158, term: "el/la electricista", definition: "electrician", category: "Jobs & Trades" },
-      { id: 159, term: "el/la fontanero/a", definition: "plumber", category: "Jobs & Trades" },
-      { id: 160, term: "el/la jardinero/a", definition: "gardener", category: "Jobs & Trades" },
-      { id: 161, term: "el/la pintor(a)", definition: "painter", category: "Jobs & Trades" },
-      { id: 162, term: "el/la mecánico/a", definition: "mechanic", category: "Jobs & Trades" },
+function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-      // ── Professions ──
-      { id: 163, term: "las profesiones", definition: "professions", category: "Professions" },
-      { id: 164, term: "los oficios", definition: "jobs", category: "Professions" },
-      { id: 165, term: "el/la abogado/a", definition: "lawyer", category: "Professions" },
-      { id: 166, term: "el/la asistente de vuelo", definition: "flight attendant", category: "Professions" },
-      { id: 167, term: "el/la bibliotecario/a", definition: "librarian", category: "Professions" },
-      { id: 168, term: "el/la consultor(a)", definition: "consultant", category: "Professions" },
-      { id: 169, term: "el/la enfermero/a", definition: "nurse", category: "Professions" },
-      { id: 170, term: "el/la ingeniero/a", definition: "engineer", category: "Professions" },
-      { id: 171, term: "el/la maestro/a", definition: "teacher", category: "Professions" },
-      { id: 172, term: "el/la trabajador(a) social", definition: "social worker", category: "Professions" },
-      { id: 173, term: "el/la vendedor(a)", definition: "salesperson", category: "Professions" },
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
-      // ── Job Search ──
-      { id: 174, term: "los anuncios/avisos clasificados", definition: "classified ads", category: "Job Search" },
-      { id: 175, term: "la carta de interés / de recomendación", definition: "cover letter / letter of recommendation", category: "Job Search" },
-      { id: 176, term: "el currículum (vitae)", definition: "resume, CV", category: "Job Search" },
-      { id: 177, term: "el curso de perfeccionamiento/capacitación", definition: "training course", category: "Job Search" },
-      { id: 178, term: "la formación", definition: "education, training", category: "Job Search" },
-      { id: 179, term: "la solicitud", definition: "application", category: "Job Search" },
-      { id: 180, term: "formarse", definition: "to educate/train oneself", category: "Job Search" },
+  return React.createElement(AuthCtx.Provider, { value: { user, loading } }, children);
+}
 
-      // ── Workplace ──
-      { id: 181, term: "el (período de) aprendizaje", definition: "learning/training (period)", category: "Workplace" },
-      { id: 182, term: "el ascenso", definition: "promotion", category: "Workplace" },
-      { id: 183, term: "el aumento (de sueldo)", definition: "(salary) increase; raise", category: "Workplace" },
-      { id: 184, term: "la capacidad de adaptarse", definition: "ability/capacity to adapt", category: "Workplace" },
-      { id: 185, term: "el contrato", definition: "contract", category: "Workplace" },
-      { id: 186, term: "el desempleo", definition: "unemployment", category: "Workplace" },
-      { id: 187, term: "el despido", definition: "lay-off; dismissal (from job)", category: "Workplace" },
-      { id: 188, term: "los días feriados", definition: "holidays", category: "Workplace" },
-      { id: 189, term: "el/la empleado/a", definition: "employee", category: "Workplace" },
-      { id: 190, term: "el/la empleador(a)", definition: "employer", category: "Workplace" },
-      { id: 191, term: "la empresa", definition: "corporation", category: "Workplace" },
-      { id: 192, term: "el éxito", definition: "success", category: "Workplace" },
-      { id: 193, term: "la firma", definition: "signature", category: "Workplace" },
-      { id: 194, term: "el fracaso", definition: "failure", category: "Workplace" },
-      { id: 195, term: "el/la gerente", definition: "manager, director", category: "Workplace" },
-      { id: 196, term: "la huelga", definition: "strike", category: "Workplace" },
-      { id: 197, term: "la guardería infantil", definition: "day-care center", category: "Workplace" },
-      { id: 198, term: "los impuestos", definition: "taxes", category: "Workplace" },
-      { id: 199, term: "la jubilación", definition: "retirement", category: "Workplace" },
-      { id: 200, term: "la licencia (por maternidad/matrimonio/enfermedad)", definition: "(maternity/marital/sick) leave", category: "Workplace" },
-      { id: 201, term: "la manifestación", definition: "demonstration", category: "Workplace" },
-      { id: 202, term: "el mercado", definition: "market", category: "Workplace" },
-      { id: 203, term: "la meta", definition: "goal", category: "Workplace" },
-      { id: 204, term: "la práctica laboral", definition: "internship", category: "Workplace" },
-      { id: 205, term: "el puesto", definition: "position", category: "Workplace" },
-      { id: 206, term: "la renuncia", definition: "resignation", category: "Workplace" },
-      { id: 207, term: "el seguro (de vida / médico / dental)", definition: "(life/medical/dental) insurance", category: "Workplace" },
-      { id: 208, term: "el sindicato", definition: "labor union", category: "Workplace" },
-      { id: 209, term: "el/la socio/a", definition: "partner", category: "Workplace" },
-      { id: 210, term: "ascender", definition: "to promote", category: "Workplace" },
-      { id: 211, term: "aumentar", definition: "to increase", category: "Workplace" },
-      { id: 212, term: "contratar", definition: "to contract", category: "Workplace" },
-      { id: 213, term: "despedir", definition: "to lay off, fire", category: "Workplace" },
-      { id: 214, term: "emplear", definition: "to employ", category: "Workplace" },
-      { id: 215, term: "estar desempleado/a", definition: "to be unemployed", category: "Workplace" },
-      { id: 216, term: "firmar", definition: "to sign", category: "Workplace" },
-      { id: 217, term: "jubilarse", definition: "to retire", category: "Workplace" },
-      { id: 218, term: "renunciar", definition: "to resign", category: "Workplace" },
+/* ═══════════════════════ PROGRESS HOOK — Supabase ═══════════════════════
+   Loads user_progress from Supabase on mount (or fallback to localStorage
+   for guest mode). Upserts after every answer.
+   ═══════════════════════════════════════════════════════════════════════ */
+function useProgress(user) {
+  const LOCAL_KEY = "uga_sp2001_v4";
+  const { addToast } = useContext(ToastCtx);
 
-      // ── Media ──
-      { id: 219, term: "el aparato", definition: "appliance; machine", category: "Media" },
-      { id: 220, term: "la emisora de radio", definition: "radio station", category: "Media" },
-      { id: 221, term: "el/la locutor(a)", definition: "radio host", category: "Media" },
-      { id: 222, term: "el mensaje", definition: "message", category: "Media" },
-      { id: 223, term: "la noticia", definition: "piece of news", category: "Media" },
-      { id: 224, term: "las noticias", definition: "news", category: "Media" },
-      { id: 225, term: "el noticiero", definition: "news(cast); news program", category: "Media" },
-      { id: 226, term: "el periódico", definition: "newspaper", category: "Media" },
-      { id: 227, term: "el/la periodista", definition: "journalist", category: "Media" },
-      { id: 228, term: "la prensa", definition: "press; media", category: "Media" },
-      { id: 229, term: "el/la presentador(a)", definition: "TV host(ess); anchorperson", category: "Media" },
-      { id: 230, term: "el programa informativo", definition: "information program", category: "Media" },
-      { id: 231, term: "el reportaje", definition: "news report", category: "Media" },
-      { id: 232, term: "la revista", definition: "magazine", category: "Media" },
+  // ws = { [vocab_item_id]: { level: 0-3, misses: 0 } }
+  const [ws, setWs] = useState(() => {
+    const o = {};
+    VOCAB.forEach(w => { o[w.id] = { level: 0, misses: 0 }; });
+    try {
+      const d = JSON.parse(localStorage.getItem(LOCAL_KEY));
+      if (d?.v === 4 && d.ws) return d.ws;
+    } catch {}
+    return o;
+  });
 
-      // ── Technology ──
-      { id: 233, term: "el archivo", definition: "document", category: "Technology" },
-      { id: 234, term: "la arroba", definition: "@", category: "Technology" },
-      { id: 235, term: "la batería", definition: "battery", category: "Technology" },
-      { id: 236, term: "el buscador", definition: "search engine", category: "Technology" },
-      { id: 237, term: "el cargador", definition: "charger", category: "Technology" },
-      { id: 238, term: "la (computadora) portátil", definition: "laptop", category: "Technology" },
-      { id: 239, term: "el correo electrónico / e-mail", definition: "e-mail", category: "Technology" },
-      { id: 240, term: "la dirección de Internet", definition: "Internet address", category: "Technology" },
-      { id: 241, term: "el disco duro", definition: "hard drive", category: "Technology" },
-      { id: 242, term: "la impresora", definition: "printer", category: "Technology" },
-      { id: 243, term: "el lector electrónico", definition: "eReader", category: "Technology" },
-      { id: 244, term: "la página web", definition: "web page", category: "Technology" },
-      { id: 245, term: "la pantalla", definition: "screen", category: "Technology" },
-      { id: 246, term: "la Red / la Internet", definition: "Internet", category: "Technology" },
-      { id: 247, term: "la red social", definition: "social network", category: "Technology" },
-      { id: 248, term: "el reproductor de MP3", definition: "MP3 player", category: "Technology" },
-      { id: 249, term: "el servidor", definition: "server", category: "Technology" },
-      { id: 250, term: "el sitio web", definition: "web site", category: "Technology" },
-      { id: 251, term: "la tecla", definition: "key", category: "Technology" },
-      { id: 252, term: "el teclado", definition: "keyboard", category: "Technology" },
-      { id: 253, term: "el/la usuario/a", definition: "user", category: "Technology" },
-      { id: 254, term: "almacenar", definition: "to store", category: "Technology" },
-      { id: 255, term: "archivar", definition: "to file", category: "Technology" },
-      { id: 256, term: "borrar", definition: "to erase", category: "Technology" },
-      { id: 257, term: "buscar", definition: "to look for; to search", category: "Technology" },
-      { id: 258, term: "enviar (un fax / un mensaje)", definition: "to send (a fax/message)", category: "Technology" },
-      { id: 259, term: "funcionar", definition: "to function, work", category: "Technology" },
-      { id: 260, term: "grabar", definition: "to record", category: "Technology" },
-      { id: 261, term: "guardar", definition: "to save", category: "Technology" },
-      { id: 262, term: "hacer una búsqueda", definition: "to look for; to search", category: "Technology" },
-      { id: 263, term: "hacer clic", definition: "to click", category: "Technology" },
-      { id: 264, term: "imprimir", definition: "to print", category: "Technology" },
-      { id: 265, term: "pulsar", definition: "to click", category: "Technology" },
+  const [loaded, setLoaded] = useState(false);
+  const pendingRef = useRef([]);
+  const wsRef = useRef(ws); // mirror state to avoid side-effects inside setState
+  useEffect(() => { wsRef.current = ws; }, [ws]);
 
-      // ── Society ──
-      { id: 266, term: "el aislamiento", definition: "isolation", category: "Society" },
-      { id: 267, term: "el punto", definition: "dot", category: "Society" },
-      { id: 268, term: "la sigla", definition: "(capital) letter used to abbreviate a name", category: "Society" },
-      { id: 269, term: "la soledad", definition: "solitude; loneliness", category: "Society" },
-      { id: 270, term: "la ventaja", definition: "advantage", category: "Society" },
-      { id: 271, term: "aislarse", definition: "to isolate (oneself)", category: "Society" },
-      { id: 272, term: "cara a cara", definition: "face to face", category: "Society" },
-
-      // ── Lifestyle ──
-      { id: 273, term: "el bienestar", definition: "well-being", category: "Lifestyle" },
-      { id: 274, term: "el entretenimiento", definition: "entertainment; pastime", category: "Lifestyle" },
-      { id: 275, term: "el nivel de vida", definition: "standard of living", category: "Lifestyle" },
-      { id: 276, term: "el ocio", definition: "leisure", category: "Lifestyle" },
-      { id: 277, term: "el pasatiempo", definition: "pastime", category: "Lifestyle" },
-      { id: 278, term: "el ritmo de la vida", definition: "pace of life", category: "Lifestyle" },
-      { id: 279, term: "disfrutar/gozar", definition: "to enjoy", category: "Lifestyle" },
-      { id: 280, term: "entretener(se)", definition: "to entertain (oneself)", category: "Lifestyle" },
-      { id: 281, term: "pasarlo bien", definition: "to have a good time", category: "Lifestyle" },
-      { id: 282, term: "relajarse", definition: "to relax", category: "Lifestyle" },
-
-      // ── Leisure ──
-      { id: 283, term: "el baile", definition: "dance", category: "Leisure" },
-      { id: 284, term: "la calle", definition: "street", category: "Leisure" },
-      { id: 285, term: "el chiste", definition: "joke", category: "Leisure" },
-      { id: 286, term: "la discoteca", definition: "disco, dance club", category: "Leisure" },
-      { id: 287, term: "la feria", definition: "fair", category: "Leisure" },
-      { id: 288, term: "el paseo", definition: "stroll", category: "Leisure" },
-      { id: 289, term: "la piscina", definition: "swimming pool", category: "Leisure" },
-      { id: 290, term: "la playa", definition: "beach", category: "Leisure" },
-      { id: 291, term: "la plaza", definition: "square", category: "Leisure" },
-      { id: 292, term: "alquilar películas", definition: "to rent movies", category: "Leisure" },
-      { id: 293, term: "bailar", definition: "to dance", category: "Leisure" },
-      { id: 294, term: "bañarse/nadar", definition: "to swim", category: "Leisure" },
-      { id: 295, term: "charlar/platicar", definition: "to chat, converse", category: "Leisure" },
-      { id: 296, term: "contar un chiste", definition: "to tell a joke", category: "Leisure" },
-      { id: 297, term: "hacer una barbacoa", definition: "to have a barbecue", category: "Leisure" },
-      { id: 298, term: "hacer un crucigrama", definition: "to do a crossword puzzle", category: "Leisure" },
-      { id: 299, term: "ir al cine / al teatro / a un concierto", definition: "to go to the movies / the theater / a concert", category: "Leisure" },
-      { id: 300, term: "jugar al dominó / al ajedrez", definition: "to play dominoes / chess", category: "Leisure" },
-      { id: 301, term: "pasear", definition: "to stroll", category: "Leisure" },
-      { id: 302, term: "trasnochar", definition: "to stay up all night", category: "Leisure" },
-
-      // ── Dining ──
-      { id: 303, term: "la botella", definition: "bottle (of water, beer, wine)", category: "Dining" },
-      { id: 304, term: "el comedor", definition: "dining room/hall", category: "Dining" },
-      { id: 305, term: "la copa", definition: "wine glass", category: "Dining" },
-      { id: 306, term: "la cuchara", definition: "spoon", category: "Dining" },
-      { id: 307, term: "la cucharita", definition: "teaspoon", category: "Dining" },
-      { id: 308, term: "el cuchillo", definition: "knife", category: "Dining" },
-      { id: 309, term: "el cuenco", definition: "soup bowl", category: "Dining" },
-      { id: 310, term: "la pimienta", definition: "pepper", category: "Dining" },
-      { id: 311, term: "el plato", definition: "dish", category: "Dining" },
-      { id: 312, term: "la sal", definition: "salt", category: "Dining" },
-      { id: 313, term: "la servilleta (de papel)", definition: "(paper) napkin", category: "Dining" },
-      { id: 314, term: "la taza", definition: "cup", category: "Dining" },
-      { id: 315, term: "el tenedor", definition: "fork", category: "Dining" },
-      { id: 316, term: "el vaso", definition: "glass", category: "Dining" },
-      { id: 317, term: "la vela (encendida)", definition: "(lit) candle", category: "Dining" },
-      { id: 318, term: "invitar", definition: "to invite; to treat (offer to pay)", category: "Dining" },
-      { id: 319, term: "oler a", definition: "to smell like", category: "Dining" },
-      { id: 320, term: "probar", definition: "to taste", category: "Dining" },
-      { id: 321, term: "saber a", definition: "to taste like", category: "Dining" },
-      { id: 322, term: "¡Buen apetito/provecho!", definition: "Enjoy your meal!", category: "Dining" },
-      { id: 323, term: "¡Qué rico/sabroso/malo!", definition: "How delicious/tasty/awful!", category: "Dining" },
-    ];
-
-    const CATEGORIES = [...new Set(VOCABULARY_DATA.map(v => v.category))];
-
-    const CATEGORY_COLORS = {
-      "Physical Appearance": { bg: "bg-rose-900/30", border: "border-rose-700", text: "text-rose-300", dot: "bg-rose-500" },
-      "Personality": { bg: "bg-amber-900/30", border: "border-amber-700", text: "text-amber-300", dot: "bg-amber-500" },
-      "Religion": { bg: "bg-violet-900/30", border: "border-violet-700", text: "text-violet-300", dot: "bg-violet-500" },
-      "Politics": { bg: "bg-blue-900/30", border: "border-blue-700", text: "text-blue-300", dot: "bg-blue-500" },
-      "Relationships": { bg: "bg-pink-900/30", border: "border-pink-700", text: "text-pink-300", dot: "bg-pink-500" },
-      "Education": { bg: "bg-cyan-900/30", border: "border-cyan-700", text: "text-cyan-300", dot: "bg-cyan-500" },
-      "Family": { bg: "bg-orange-900/30", border: "border-orange-700", text: "text-orange-300", dot: "bg-orange-500" },
-      "Celebrations": { bg: "bg-fuchsia-900/30", border: "border-fuchsia-700", text: "text-fuchsia-300", dot: "bg-fuchsia-500" },
-      "Family Life": { bg: "bg-red-900/30", border: "border-red-700", text: "text-red-300", dot: "bg-red-500" },
-      "Jobs & Trades": { bg: "bg-lime-900/30", border: "border-lime-700", text: "text-lime-300", dot: "bg-lime-500" },
-      "Professions": { bg: "bg-emerald-900/30", border: "border-emerald-700", text: "text-emerald-300", dot: "bg-emerald-500" },
-      "Job Search": { bg: "bg-teal-900/30", border: "border-teal-700", text: "text-teal-300", dot: "bg-teal-500" },
-      "Workplace": { bg: "bg-indigo-900/30", border: "border-indigo-700", text: "text-indigo-300", dot: "bg-indigo-500" },
-      "Media": { bg: "bg-sky-900/30", border: "border-sky-700", text: "text-sky-300", dot: "bg-sky-500" },
-      "Technology": { bg: "bg-green-900/30", border: "border-green-700", text: "text-green-300", dot: "bg-green-500" },
-      "Society": { bg: "bg-slate-800/50", border: "border-slate-600", text: "text-slate-300", dot: "bg-slate-500" },
-      "Lifestyle": { bg: "bg-yellow-900/30", border: "border-yellow-700", text: "text-yellow-300", dot: "bg-yellow-500" },
-      "Leisure": { bg: "bg-purple-900/30", border: "border-purple-700", text: "text-purple-300", dot: "bg-purple-500" },
-      "Dining": { bg: "bg-stone-800/50", border: "border-stone-600", text: "text-stone-300", dot: "bg-stone-400" },
+  // Warn if user tries to close tab with unsaved progress
+  useEffect(() => {
+    const handler = (e) => {
+      if (pendingRef.current.length > 0) { e.preventDefault(); e.returnValue = ""; }
     };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, []);
 
-    // ═══════════════════════════════════════════════════════════════
-    // STORAGE HELPERS
-    // ═══════════════════════════════════════════════════════════════
-    const STORAGE_KEY = "uga_spanish_2001_progress";
-
-    function loadProgress() {
+  // Load from Supabase when user logs in
+  useEffect(() => {
+    if (!user) { setLoaded(true); return; }
+    (async () => {
       try {
-        const data = JSON.parse(localStorage.getItem(STORAGE_KEY));
-        if (data && data.version === 2) return data;
-      } catch (e) {}
-      return null;
-    }
-
-    function saveProgress(state) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, version: 2 }));
-    }
-
-    function getDefaultWordState() {
-      return {
-        mastery_level: 0,    // 0=new, 1=learning, 2=familiar, 3=mastered
-        phase: 1,            // 1=MC, 2=Flashcard, 3=Written
-        mcCorrectStreak: 0,  // need 2 correct to advance from Phase 1
-        fcCorrectCount: 0,   // need 2 correct to advance from Phase 2
-        leitnerBox: 0,       // 0-4 for spaced repetition
-        lastSeen: 0,
-        wrongCount: 0,
-      };
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // SHUFFLE UTILITY
-    // ═══════════════════════════════════════════════════════════════
-    function shuffle(arr) {
-      const a = [...arr];
-      for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
+        const { data, error } = await supabase
+          .from("user_progress")
+          .select("vocab_item_id, mastery_level, misses")
+          .eq("user_id", user.id);
+        if (error) throw error;
+        if (data && data.length > 0) {
+          setWs(prev => {
+            const next = { ...prev };
+            data.forEach(r => {
+              next[r.vocab_item_id] = { level: r.mastery_level, misses: r.misses };
+            });
+            return next;
+          });
+        }
+      } catch (err) {
+        console.error("Failed to load progress:", err);
+        addToast("Could not load cloud progress. Using local backup.", "warn");
       }
-      return a;
-    }
+      setLoaded(true);
+    })();
+  }, [user]);
 
-    // ═══════════════════════════════════════════════════════════════
-    // ICONS (inline SVG components)
-    // ═══════════════════════════════════════════════════════════════
-    const Icons = {
-      Home: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>,
-      Learn: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>,
-      Filter: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>,
-      Reset: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>,
-      Check: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>,
-      X: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>,
-      Flip: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" /></svg>,
-      Star: () => <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>,
-      Bulldog: () => <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" /></svg>,
+  // Persist to localStorage on every change (instant backup / guest mode)
+  useEffect(() => {
+    localStorage.setItem(LOCAL_KEY, JSON.stringify({ v: 4, ws }));
+  }, [ws]);
+
+  // Online/offline detection
+  const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+  useEffect(() => {
+    const on  = () => { setOnline(true);  addToast("Back online — syncing progress.", "success"); flushToSupabase(); };
+    const off = () => { setOnline(false); addToast("You're offline. Progress is saved locally and will sync when reconnected.", "warn", 6000); };
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+  }, []);
+
+  // Debounced flush to Supabase (batches upserts every 600ms) — with error handling
+  const flushTimer = useRef(null);
+  const retryCount = useRef(0);
+  const flushToSupabase = useCallback(async () => {
+    if (!user || pendingRef.current.length === 0) return;
+    const batch = [...pendingRef.current];
+    pendingRef.current = [];
+    const rows = batch.map(({ id, level, misses }) => ({
+      user_id: user.id,
+      vocab_item_id: id,
+      mastery_level: level,
+      misses: misses,
+      last_reviewed: new Date().toISOString(),
+    }));
+    try {
+      const { error } = await supabase.from("user_progress").upsert(rows, { onConflict: "user_id,vocab_item_id" });
+      if (error) throw error;
+      retryCount.current = 0;
+    } catch (err) {
+      console.error("Progress save failed:", err);
+      // Put the batch back for retry
+      pendingRef.current = [...batch, ...pendingRef.current];
+      retryCount.current++;
+      if (retryCount.current <= 3) {
+        // Exponential backoff retry
+        const delay = Math.min(1000 * Math.pow(2, retryCount.current), 8000);
+        flushTimer.current = setTimeout(flushToSupabase, delay);
+      } else {
+        addToast("Progress save failed after retries. Your progress is safe locally and will sync later.", "error", 6000);
+        retryCount.current = 0;
+      }
+    }
+  }, [user]);
+
+  const enqueueUpsert = useCallback((vocabId, level, misses) => {
+    pendingRef.current.push({ id: vocabId, level, misses });
+    clearTimeout(flushTimer.current);
+    flushTimer.current = setTimeout(flushToSupabase, 600);
+  }, [flushToSupabase]);
+
+  // FIX: Update state optimistically, then read from ref for upsert (no side-effect inside setState)
+  const upd = useCallback((id, patch) => {
+    setWs(prev => {
+      const cur = prev[id] || { level: 0, misses: 0 };
+      const next = { ...cur, ...patch };
+      return { ...prev, [id]: next };
+    });
+    // Read latest merged state from the ref after React commits
+    setTimeout(() => {
+      const cur = wsRef.current[id];
+      if (cur) enqueueUpsert(id, cur.level, cur.misses);
+    }, 0);
+  }, [enqueueUpsert]);
+
+  const resetAll = useCallback(async () => {
+    const o = {};
+    VOCAB.forEach(w => { o[w.id] = { level: 0, misses: 0 }; });
+    setWs(o);
+    if (user) {
+      try {
+        const { error } = await supabase.from("user_progress").delete().eq("user_id", user.id);
+        if (error) throw error;
+        addToast("All progress reset.", "success");
+      } catch (err) {
+        console.error("Reset failed:", err);
+        addToast("Reset failed on the server — local progress was cleared.", "error");
+      }
+    }
+  }, [user]);
+
+  // Flush remaining progress when tab is closing
+  useEffect(() => {
+    const handler = () => {
+      if (user && pendingRef.current.length > 0) {
+        const rows = pendingRef.current.map(({ id, level, misses }) => ({
+          user_id: user.id, vocab_item_id: id, mastery_level: level, misses, last_reviewed: new Date().toISOString(),
+        }));
+        // navigator.sendBeacon for reliable last-chance save
+        const url = `${SUPABASE_URL}/rest/v1/user_progress`;
+        const blob = new Blob([JSON.stringify(rows)], { type: "application/json" });
+        try {
+          const headers = { "apikey": SUPABASE_ANON, "Authorization": `Bearer ${supabase.auth?.session?.()?.access_token || SUPABASE_ANON}`,
+            "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates" };
+          // Fallback: at minimum, localStorage is already saved
+          navigator.sendBeacon?.(url, blob);
+        } catch {}
+      }
     };
+    window.addEventListener("pagehide", handler);
+    return () => window.removeEventListener("pagehide", handler);
+  }, [user]);
 
-    // ═══════════════════════════════════════════════════════════════
-    // MAIN APP
-    // ═══════════════════════════════════════════════════════════════
-    function App() {
-      const [view, setView] = useState("home"); // home | learn | browse
-      const [selectedCategories, setSelectedCategories] = useState(new Set(CATEGORIES));
-      const [wordStates, setWordStates] = useState(() => {
-        const saved = loadProgress();
-        if (saved && saved.wordStates) return saved.wordStates;
-        const init = {};
-        VOCABULARY_DATA.forEach(w => { init[w.id] = getDefaultWordState(); });
-        return init;
+  return { ws, upd, resetAll, loaded };
+}
+
+/* ═══════════════════ TAILWIND CATEGORY COLORS ═══════════════════ */
+const CAT_CLR = {
+  "Physical Appearance":"rose","Personality":"amber","Religion":"violet","Politics":"blue",
+  "Relationships":"pink","Education":"cyan","Family":"orange","Celebrations":"fuchsia",
+  "Family Life":"red","Jobs & Trades":"lime","Professions":"emerald","Job Search":"teal",
+  "Workplace":"indigo","Media":"sky","Technology":"green","Society":"slate",
+  "Lifestyle":"yellow","Leisure":"purple","Dining":"stone",
+};
+
+const CAT_STYLES = Object.fromEntries(CATEGORIES.map(c => {
+  const k = CAT_CLR[c] || "slate";
+  return [c, {
+    chip:     `bg-${k}-900/30 border-${k}-700/50 text-${k}-300`,
+    chipOff:  "bg-white/[.02] border-white/[.06] text-white/20",
+    dot:      `bg-${k}-400`,
+    dotOff:   "bg-white/10",
+    badge:    `bg-${k}-900/30 text-${k}-300 border-${k}-700/40`,
+    group:    `bg-${k}-900/10 border-${k}-700/30`,
+    groupTxt: `text-${k}-300`,
+    groupDot: `bg-${k}-400`,
+    groupArr: `text-${k}-400`,
+  }];
+}));
+
+/* Tailwind JIT safelist */
+const _TW = `
+bg-rose-900/30 border-rose-700/50 text-rose-300 bg-rose-400 bg-rose-900/10 border-rose-700/30 border-rose-700/40
+bg-amber-900/30 border-amber-700/50 text-amber-300 bg-amber-400 bg-amber-900/10 border-amber-700/30 border-amber-700/40
+bg-violet-900/30 border-violet-700/50 text-violet-300 bg-violet-400 bg-violet-900/10 border-violet-700/30 border-violet-700/40
+bg-blue-900/30 border-blue-700/50 text-blue-300 bg-blue-400 bg-blue-900/10 border-blue-700/30 border-blue-700/40
+bg-pink-900/30 border-pink-700/50 text-pink-300 bg-pink-400 bg-pink-900/10 border-pink-700/30 border-pink-700/40
+bg-cyan-900/30 border-cyan-700/50 text-cyan-300 bg-cyan-400 bg-cyan-900/10 border-cyan-700/30 border-cyan-700/40
+bg-orange-900/30 border-orange-700/50 text-orange-300 bg-orange-400 bg-orange-900/10 border-orange-700/30 border-orange-700/40
+bg-fuchsia-900/30 border-fuchsia-700/50 text-fuchsia-300 bg-fuchsia-400 bg-fuchsia-900/10 border-fuchsia-700/30 border-fuchsia-700/40
+bg-red-900/30 border-red-700/50 text-red-300 bg-red-400 bg-red-900/10 border-red-700/30 border-red-700/40
+bg-lime-900/30 border-lime-700/50 text-lime-300 bg-lime-400 bg-lime-900/10 border-lime-700/30 border-lime-700/40
+bg-emerald-900/30 border-emerald-700/50 text-emerald-300 bg-emerald-400 bg-emerald-900/10 border-emerald-700/30 border-emerald-700/40
+bg-teal-900/30 border-teal-700/50 text-teal-300 bg-teal-400 bg-teal-900/10 border-teal-700/30 border-teal-700/40
+bg-indigo-900/30 border-indigo-700/50 text-indigo-300 bg-indigo-400 bg-indigo-900/10 border-indigo-700/30 border-indigo-700/40
+bg-sky-900/30 border-sky-700/50 text-sky-300 bg-sky-400 bg-sky-900/10 border-sky-700/30 border-sky-700/40
+bg-green-900/30 border-green-700/50 text-green-300 bg-green-400 bg-green-900/10 border-green-700/30 border-green-700/40
+bg-slate-900/30 border-slate-700/50 text-slate-300 bg-slate-400 bg-slate-900/10 border-slate-700/30 border-slate-700/40
+bg-yellow-900/30 border-yellow-700/50 text-yellow-300 bg-yellow-400 bg-yellow-900/10 border-yellow-700/30 border-yellow-700/40
+bg-purple-900/30 border-purple-700/50 text-purple-300 bg-purple-400 bg-purple-900/10 border-purple-700/30 border-purple-700/40
+bg-stone-900/30 border-stone-700/50 text-stone-300 bg-stone-400 bg-stone-900/10 border-stone-700/30 border-stone-700/40
+`;
+
+/* ═══════════════════════ AUTH PAGE ═══════════════════════ */
+function AuthPage() {
+  const [mode, setMode] = useState("login"); // login | signup
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      if (mode === "signup") {
+        const { error: err } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { username: username || email.split("@")[0] } }
+        });
+        if (err) throw err;
+        setSent(true);
+      } else {
+        const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+        if (err) throw err;
+      }
+    } catch (err) {
+      setError(err.message || "An error occurred");
+    }
+    setLoading(false);
+  };
+
+  if (sent) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="text-center anim-scale-in max-w-sm">
+          <div className="text-5xl mb-4">📧</div>
+          <h2 className="text-xl font-black text-white mb-2">Check your email!</h2>
+          <p className="text-white/40 text-sm mb-6">We sent a confirmation link to <strong className="text-white/70">{email}</strong>. Click it, then come back here and log in.</p>
+          <button onClick={() => { setSent(false); setMode("login"); }}
+            className="px-6 py-2.5 bg-uga-red text-white font-bold rounded-xl text-sm hover:bg-uga-red-dark transition">
+            Back to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="w-full max-w-sm anim-scale-in">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-uga-red flex items-center justify-center font-black text-lg text-white mb-3">UGA</div>
+          <h1 className="text-2xl font-black text-white">Spanish 2001</h1>
+          <p className="text-white/35 text-xs mt-1">Sign in to sync your progress across devices</p>
+        </div>
+
+        {/* Toggle */}
+        <div className="flex bg-white/[.04] rounded-xl p-0.5 border border-white/[.06] mb-6">
+          {[["login","Log In"],["signup","Sign Up"]].map(([id,lbl]) => (
+            <button key={id} onClick={() => { setMode(id); setError(""); }}
+              className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${
+                mode === id ? "bg-uga-red text-white shadow-lg shadow-uga-red/20" : "text-white/40 hover:text-white/70"
+              }`}>{lbl}</button>
+          ))}
+        </div>
+
+        <form onSubmit={submit} className="space-y-3">
+          {mode === "signup" && (
+            <input type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="Username (optional)"
+              className="w-full px-4 py-3 rounded-xl bg-white/[.04] border border-white/[.06] text-white text-sm outline-none focus:border-uga-red/50 transition" />
+          )}
+          <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="Email"
+            className="w-full px-4 py-3 rounded-xl bg-white/[.04] border border-white/[.06] text-white text-sm outline-none focus:border-uga-red/50 transition" />
+          <input type="password" required minLength={6} value={password} onChange={e => setPassword(e.target.value)} placeholder="Password (min 6 chars)"
+            className="w-full px-4 py-3 rounded-xl bg-white/[.04] border border-white/[.06] text-white text-sm outline-none focus:border-uga-red/50 transition" />
+
+          {error && (
+            <div className="px-3 py-2 rounded-lg bg-red-900/30 border border-red-800/40 text-red-300 text-xs anim-fade-in">{error}</div>
+          )}
+
+          <button type="submit" disabled={loading}
+            className="w-full py-3 rounded-xl bg-uga-red text-white font-bold text-sm hover:bg-uga-red-dark transition disabled:opacity-40">
+            {loading ? "..." : mode === "signup" ? "Create Account" : "Log In"}
+          </button>
+        </form>
+
+        <p className="text-center text-white/15 text-[10px] mt-6">Progress is saved to the cloud when logged in</p>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════ APP SHELL ═══════════════════════ */
+function App() {
+  const { user, loading: authLoading } = useContext(AuthCtx);
+  const [view, setView] = useState("home");
+  const [cats, setCats] = useState(new Set(CATEGORIES));
+  const { ws, upd, resetAll, loaded: progressLoaded } = useProgress(user);
+
+  // Show auth page if not logged in
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-uga-red border-t-transparent rounded-full anim-spin" />
+      </div>
+    );
+  }
+
+  if (!user) return <AuthPage />;
+
+  if (!progressLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center flex-col gap-3">
+        <div className="w-8 h-8 border-2 border-uga-red border-t-transparent rounded-full anim-spin" />
+        <p className="text-white/30 text-xs">Loading your progress...</p>
+      </div>
+    );
+  }
+
+  const toggle = c => setCats(p => { const n = new Set(p); n.has(c) ? n.delete(c) : n.add(c); return n; });
+
+  const stats = (() => {
+    let notStarted = 0, learning = 0, mastered = 0;
+    VOCAB.forEach(w => {
+      if (!cats.has(w.cat)) return;
+      const l = ws[w.id]?.level ?? 0;
+      if (l === 0) notStarted++;
+      else if (l < 3) learning++;
+      else mastered++;
+    });
+    return { notStarted, learning, mastered, total: notStarted + learning + mastered };
+  })();
+
+  const { addToast } = useContext(ToastCtx);
+
+  const signOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+    } catch (err) {
+      addToast("Sign out failed: " + (err.message || "Unknown error"), "error");
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      {/* NAV */}
+      <nav className="sticky top-0 z-50 bg-[#050507]/80 backdrop-blur-lg border-b border-white/[.06]">
+        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-uga-red flex items-center justify-center font-black text-[11px] text-white tracking-tight">UGA</div>
+            <span className="text-sm font-bold text-white/90 hidden sm:inline">Spanish 2001</span>
+          </div>
+          <div className="flex bg-white/[.04] rounded-xl p-0.5 border border-white/[.06]">
+            {[["home","Home"],["learn","Learn"],["browse","Browse"]].map(([id,lbl]) => (
+              <button key={id} onClick={() => setView(id)}
+                className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  view === id ? "bg-uga-red text-white shadow-lg shadow-uga-red/20" : "text-white/40 hover:text-white/70"
+                }`}>{lbl}</button>
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] text-white/25 hidden sm:inline">{user.email}</span>
+            <button onClick={signOut} className="text-[10px] text-white/30 hover:text-uga-red transition font-semibold">Sign Out</button>
+          </div>
+        </div>
+      </nav>
+
+      {/* BODY */}
+      <div className="flex-1 flex">
+        {view === "home" && <HomePage stats={stats} cats={cats} toggle={toggle} setCats={setCats} setView={setView} resetAll={resetAll} ws={ws} />}
+        {view === "learn" && <LearningEngine cats={cats} ws={ws} upd={upd} setView={setView} />}
+        {view === "browse" && <BrowsePage cats={cats} toggle={toggle} setCats={setCats} ws={ws} />}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════ HOME PAGE ═══════════════════════ */
+function HomePage({ stats, cats, toggle, setCats, setView, resetAll, ws }) {
+  const [confirmReset, setConfirmReset] = useState(false);
+  const pct = stats.total ? Math.round(stats.mastered / stats.total * 100) : 0;
+
+  return (
+    <div className="flex-1 max-w-5xl mx-auto w-full px-4 py-8 space-y-6 anim-fade-up">
+      {/* Hero */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-uga-red via-uga-red-dark to-[#2a0510] p-8 border border-white/10">
+        <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-white/[.04]" />
+        <div className="absolute bottom-0 right-8 text-[120px] leading-none opacity-[.06] font-black select-none">G</div>
+        <div className="relative z-10">
+          <p className="text-white/50 text-xs font-semibold tracking-widest uppercase mb-1">UGA Spanish 2001</p>
+          <h1 className="text-3xl sm:text-4xl font-black text-white mb-1">¡Vamos a estudiar!</h1>
+          <p className="text-white/50 text-sm mb-6">{stats.total} words &middot; {cats.size} categories selected</p>
+          <button onClick={() => setView("learn")} disabled={cats.size === 0}
+            className="group relative px-8 py-3 bg-white text-uga-red font-extrabold rounded-xl hover:bg-white/90 transition shadow-xl shadow-black/30 disabled:opacity-30 disabled:cursor-not-allowed">
+            Start Learning <span className="ml-2 inline-block transition-transform group-hover:translate-x-1">&rarr;</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-3">
+        <StatBox label="Not Started" n={stats.notStarted} total={stats.total} barCls="bg-white/20" numCls="text-white/50" />
+        <StatBox label="Learning" n={stats.learning} total={stats.total} barCls="bg-amber-500" numCls="text-amber-400" />
+        <StatBox label="Mastered" n={stats.mastered} total={stats.total} barCls="bg-emerald-500" numCls="text-emerald-400" />
+      </div>
+
+      {/* Overall bar */}
+      <div className="rounded-xl bg-white/[.03] border border-white/[.06] p-5">
+        <div className="flex justify-between items-center mb-2.5">
+          <span className="text-xs font-semibold text-white/50">Overall Mastery</span>
+          <span className="text-sm font-black text-white">{pct}%</span>
+        </div>
+        <div className="h-3 rounded-full bg-white/[.05] overflow-hidden flex">
+          <div className="bar-fill h-full bg-emerald-500 rounded-l-full" style={{ width: `${stats.total ? stats.mastered / stats.total * 100 : 0}%` }} />
+          <div className="bar-fill h-full bg-amber-500" style={{ width: `${stats.total ? stats.learning / stats.total * 100 : 0}%` }} />
+        </div>
+        <div className="flex gap-5 mt-2">
+          {[["Mastered","bg-emerald-500"],["Learning","bg-amber-500"],["Not Started","bg-white/10"]].map(([l,c]) => (
+            <span key={l} className="flex items-center gap-1.5 text-[10px] text-white/35"><span className={`w-2 h-2 rounded-full ${c}`} />{l}</span>
+          ))}
+        </div>
+      </div>
+
+      {/* Categories */}
+      <div className="rounded-xl bg-white/[.03] border border-white/[.06] p-5">
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-sm font-bold text-white/90">Categories</h3>
+          <div className="flex gap-2 text-[10px] font-bold">
+            <button onClick={() => setCats(new Set(CATEGORIES))} className="text-uga-red hover:text-uga-red/70">All</button>
+            <button onClick={() => setCats(new Set())} className="text-white/30 hover:text-white/50">None</button>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {CATEGORIES.map(c => {
+            const s = CAT_STYLES[c];
+            const on = cats.has(c);
+            const cnt = VOCAB.filter(w => w.cat === c).length;
+            return (
+              <button key={c} onClick={() => toggle(c)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all ${on ? s.chip : s.chipOff}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${on ? s.dot : s.dotOff}`} />
+                {c}<span className="opacity-50 ml-0.5">({cnt})</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Reset */}
+      <div className="flex justify-end">
+        {!confirmReset ? (
+          <button onClick={() => setConfirmReset(true)} className="text-[11px] text-white/20 hover:text-uga-red transition flex items-center gap-1.5">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+            Reset all progress
+          </button>
+        ) : (
+          <div className="flex items-center gap-2 anim-fade-in">
+            <span className="text-xs text-uga-red font-semibold">Erase everything?</span>
+            <button onClick={() => { resetAll(); setConfirmReset(false); }} className="px-3 py-1 bg-uga-red text-white text-[11px] font-bold rounded-lg">Yes</button>
+            <button onClick={() => setConfirmReset(false)} className="px-3 py-1 bg-white/10 text-white text-[11px] rounded-lg">No</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatBox({ label, n, total, barCls, numCls }) {
+  return (
+    <div className="rounded-xl bg-white/[.03] border border-white/[.06] p-4 text-center">
+      <div className={`text-2xl font-black ${numCls}`}>{n}</div>
+      <div className="text-[10px] text-white/35 font-medium mt-0.5">{label}</div>
+      <div className="h-1 mt-2 rounded-full bg-white/[.04] overflow-hidden">
+        <div className={`h-full rounded-full ${barCls} bar-fill`} style={{ width: `${total ? n / total * 100 : 0}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ███  LEARNING ENGINE  ███
+   ══════════════════════════════════════════════════════════════════
+   MASTERY PIPELINE:
+     Level 0 (New)      → Multiple Choice (Spanish term → pick English)
+     Level 1 (Familiar) → Type the Answer  (English def → type Spanish)
+     Level 3 (Mastered) → Removed from pool
+   STUDY GAP: Level 1 words served BEFORE Level 0 words.
+   CORRECTION MODE: Must retype correct answer after a miss.
+   PENALTY: Miss Type → drops to Level 0.
+   ══════════════════════════════════════════════════════════════════ */
+function LearningEngine({ cats, ws, upd, setView }) {
+  const [queue, setQueue] = useState([]);
+  const [idx, setIdx] = useState(0);
+  const [round, setRound] = useState(1);
+  const [sessionCorrect, setSessionCorrect] = useState(0);
+  const [sessionWrong, setSessionWrong] = useState(0);
+
+  const buildQueue = useCallback((currentWs) => {
+    const w = currentWs || ws;
+    const eligible = VOCAB.filter(v => cats.has(v.cat) && (w[v.id]?.level ?? 0) < 3);
+    // Study Gap: Level 1 first, then Level 0
+    const l1 = shuffle(eligible.filter(v => (w[v.id]?.level ?? 0) === 1));
+    const l0 = shuffle(eligible.filter(v => (w[v.id]?.level ?? 0) === 0));
+    return [...l1, ...l0];
+  }, [cats, ws]);
+
+  useEffect(() => {
+    const q = buildQueue();
+    setQueue(q);
+    setIdx(0);
+    setRound(1);
+    setSessionCorrect(0);
+    setSessionWrong(0);
+  }, [cats]);
+
+  const current = queue[idx];
+  const currentLevel = current ? (ws[current.id]?.level ?? 0) : 0;
+
+  const advance = useCallback(() => {
+    if (idx + 1 < queue.length) {
+      setIdx(i => i + 1);
+    } else {
+      const q = buildQueue(ws);
+      if (q.length === 0) {
+        setQueue([]);
+        setIdx(0);
+      } else {
+        setQueue(q);
+        setIdx(0);
+        setRound(r => r + 1);
+      }
+    }
+  }, [idx, queue.length, buildQueue, ws]);
+
+  const handleCorrect = useCallback((id) => {
+    const lvl = ws[id]?.level ?? 0;
+    if (lvl === 0) upd(id, { level: 1 });
+    else if (lvl === 1) upd(id, { level: 3 });
+    setSessionCorrect(c => c + 1);
+  }, [ws, upd]);
+
+  const handleWrong = useCallback((id) => {
+    const lvl = ws[id]?.level ?? 0;
+    if (lvl === 1) upd(id, { level: 0, misses: (ws[id]?.misses ?? 0) + 1 });
+    else upd(id, { misses: (ws[id]?.misses ?? 0) + 1 });
+    setSessionWrong(c => c + 1);
+    if (current) {
+      setQueue(prev => {
+        const copy = [...prev];
+        const insertAt = Math.min(idx + 3 + Math.floor(Math.random() * 3), copy.length);
+        copy.splice(insertAt, 0, current);
+        return copy;
       });
-
-      // Persist to localStorage on every change
-      useEffect(() => {
-        saveProgress({ wordStates });
-      }, [wordStates]);
-
-      const updateWordState = useCallback((id, updates) => {
-        setWordStates(prev => ({
-          ...prev,
-          [id]: { ...prev[id], ...updates }
-        }));
-      }, []);
-
-      const resetProgress = useCallback(() => {
-        const init = {};
-        VOCABULARY_DATA.forEach(w => { init[w.id] = getDefaultWordState(); });
-        setWordStates(init);
-      }, []);
-
-      const stats = useMemo(() => {
-        let newW = 0, learning = 0, mastered = 0;
-        VOCABULARY_DATA.forEach(w => {
-          if (!selectedCategories.has(w.category)) return;
-          const s = wordStates[w.id];
-          if (!s || s.mastery_level === 0) newW++;
-          else if (s.mastery_level < 3) learning++;
-          else mastered++;
-        });
-        const total = newW + learning + mastered;
-        return { newW, learning, mastered, total };
-      }, [wordStates, selectedCategories]);
-
-      const toggleCategory = (cat) => {
-        setSelectedCategories(prev => {
-          const next = new Set(prev);
-          if (next.has(cat)) next.delete(cat);
-          else next.add(cat);
-          return next;
-        });
-      };
-
-      const selectAllCategories = () => setSelectedCategories(new Set(CATEGORIES));
-      const deselectAllCategories = () => setSelectedCategories(new Set());
-
-      return (
-        <div className="min-h-screen bg-[#0a0a0a]">
-          {/* ── NAV BAR ── */}
-          <nav className="sticky top-0 z-50 bg-[#0a0a0a]/90 backdrop-blur-md border-b border-white/10">
-            <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-uga-red flex items-center justify-center font-black text-white text-sm">
-                  UGA
-                </div>
-                <div>
-                  <h1 className="text-sm font-bold text-white leading-none">Spanish 2001</h1>
-                  <p className="text-[10px] text-white/40 leading-none mt-0.5">Midterm Vocabulary</p>
-                </div>
-              </div>
-              <div className="flex gap-1">
-                {[
-                  { id: "home", icon: Icons.Home, label: "Home" },
-                  { id: "learn", icon: Icons.Learn, label: "Learn" },
-                  { id: "browse", icon: Icons.Filter, label: "Browse" },
-                ].map(tab => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setView(tab.id)}
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all
-                      ${view === tab.id
-                        ? "bg-uga-red text-white shadow-lg shadow-uga-red/25"
-                        : "text-white/50 hover:text-white hover:bg-white/5"
-                      }`}
-                  >
-                    <tab.icon />{tab.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </nav>
-
-          {/* ── CONTENT ── */}
-          <main className="max-w-5xl mx-auto px-4 py-6">
-            {view === "home" && (
-              <HomeView
-                stats={stats}
-                wordStates={wordStates}
-                selectedCategories={selectedCategories}
-                toggleCategory={toggleCategory}
-                selectAll={selectAllCategories}
-                deselectAll={deselectAllCategories}
-                onStart={() => setView("learn")}
-                onReset={resetProgress}
-              />
-            )}
-            {view === "learn" && (
-              <LearnView
-                selectedCategories={selectedCategories}
-                wordStates={wordStates}
-                updateWordState={updateWordState}
-                onBack={() => setView("home")}
-              />
-            )}
-            {view === "browse" && (
-              <BrowseView
-                wordStates={wordStates}
-                selectedCategories={selectedCategories}
-                toggleCategory={toggleCategory}
-                selectAll={selectAllCategories}
-                deselectAll={deselectAllCategories}
-              />
-            )}
-          </main>
-        </div>
-      );
     }
+  }, [ws, upd, idx, current]);
 
-    // ═══════════════════════════════════════════════════════════════
-    // HOME VIEW
-    // ═══════════════════════════════════════════════════════════════
-    function HomeView({ stats, wordStates, selectedCategories, toggleCategory, selectAll, deselectAll, onStart, onReset }) {
-      const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const sideStats = useMemo(() => {
+    const active = VOCAB.filter(w => cats.has(w.cat));
+    let ns = 0, lr = 0, ma = 0;
+    active.forEach(w => {
+      const l = ws[w.id]?.level ?? 0;
+      if (l === 0) ns++;
+      else if (l < 3) lr++;
+      else ma++;
+    });
+    return { total: active.length, ns, lr, ma };
+  }, [ws, cats]);
 
-      return (
-        <div className="animate-slide-in space-y-6">
-          {/* Hero */}
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-uga-red via-uga-red-dark to-black p-8 border border-white/10">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
-            <div className="relative">
-              <h2 className="text-3xl font-black text-white mb-1">¡Vamos a estudiar!</h2>
-              <p className="text-white/60 text-sm mb-6">Master {stats.total} vocabulary words across {selectedCategories.size} categories</p>
-              <button
-                onClick={onStart}
-                disabled={selectedCategories.size === 0}
-                className="px-8 py-3 bg-white text-uga-red font-bold rounded-xl hover:bg-white/90 transition-all shadow-xl shadow-black/30 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Start Learning →
-              </button>
+  if (queue.length === 0 || !current) {
+    const allDone = VOCAB.filter(w => cats.has(w.cat)).every(w => (ws[w.id]?.level ?? 0) >= 3);
+    return (
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="text-center anim-scale-in max-w-md">
+          <div className="text-7xl mb-4">{allDone ? "🎓" : "📚"}</div>
+          <h2 className="text-2xl font-black text-white mb-2">{allDone ? "All Words Mastered!" : "No Words to Study"}</h2>
+          <p className="text-white/40 text-sm mb-3">
+            {allDone ? `You've mastered all ${sideStats.total} words. ¡Increíble!` : "Select categories on the Home page to begin."}
+          </p>
+          {(sessionCorrect > 0 || sessionWrong > 0) && (
+            <div className="flex justify-center gap-4 mb-6">
+              <span className="text-emerald-400 text-sm font-bold">{sessionCorrect} correct</span>
+              <span className="text-red-400 text-sm font-bold">{sessionWrong} missed</span>
             </div>
+          )}
+          <button onClick={() => setView("home")} className="px-8 py-3 bg-uga-red text-white font-bold rounded-xl hover:bg-uga-red-dark transition">&larr; Home</button>
+        </div>
+      </div>
+    );
+  }
+
+  const catStyle = CAT_STYLES[current.cat] || CAT_STYLES["Society"];
+
+  return (
+    <div className="flex-1 flex flex-col lg:flex-row max-w-6xl mx-auto w-full">
+      {/* Desktop Sidebar */}
+      <aside className="hidden lg:flex flex-col w-64 shrink-0 border-r border-white/[.06] p-5 gap-5">
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-white/30 font-bold mb-3">Progress</p>
+          <SideBar label="Not Started" n={sideStats.ns} total={sideStats.total} barCls="bg-white/20" txtCls="text-white/40" />
+          <SideBar label="Learning"    n={sideStats.lr} total={sideStats.total} barCls="bg-amber-500"   txtCls="text-amber-400" />
+          <SideBar label="Mastered"    n={sideStats.ma} total={sideStats.total} barCls="bg-emerald-500" txtCls="text-emerald-400" />
+        </div>
+        <div className="border-t border-white/[.06] pt-4">
+          <p className="text-[10px] uppercase tracking-widest text-white/30 font-bold mb-2">This Session</p>
+          <div className="flex gap-3 text-xs">
+            <span className="text-emerald-400 font-bold">{sessionCorrect} ✓</span>
+            <span className="text-red-400 font-bold">{sessionWrong} ✗</span>
           </div>
+          <p className="text-[10px] text-white/20 mt-1">Round {round}</p>
+        </div>
+        <button onClick={() => setView("home")} className="mt-auto text-xs text-white/25 hover:text-white/50 transition text-left">&larr; Back to Home</button>
+      </aside>
 
-          {/* Progress Overview */}
-          <div className="grid grid-cols-3 gap-3">
-            <StatCard label="New" count={stats.newW} total={stats.total} color="bg-white/20" textColor="text-white/70" />
-            <StatCard label="Learning" count={stats.learning} total={stats.total} color="bg-amber-500" textColor="text-amber-400" />
-            <StatCard label="Mastered" count={stats.mastered} total={stats.total} color="bg-emerald-500" textColor="text-emerald-400" />
-          </div>
-
-          {/* Progress Bar */}
-          <div className="rounded-xl bg-white/5 border border-white/10 p-4">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-xs font-semibold text-white/60">Overall Progress</span>
-              <span className="text-xs font-bold text-white">{stats.total > 0 ? Math.round((stats.mastered / stats.total) * 100) : 0}%</span>
-            </div>
-            <div className="h-3 bg-white/5 rounded-full overflow-hidden flex">
-              <div className="progress-bar-fill bg-emerald-500 h-full" style={{ width: `${stats.total > 0 ? (stats.mastered / stats.total) * 100 : 0}%` }} />
-              <div className="progress-bar-fill bg-amber-500 h-full" style={{ width: `${stats.total > 0 ? (stats.learning / stats.total) * 100 : 0}%` }} />
-            </div>
-            <div className="flex gap-4 mt-2">
-              <span className="flex items-center gap-1 text-[10px] text-white/40"><span className="w-2 h-2 rounded-full bg-emerald-500" />Mastered</span>
-              <span className="flex items-center gap-1 text-[10px] text-white/40"><span className="w-2 h-2 rounded-full bg-amber-500" />Learning</span>
-              <span className="flex items-center gap-1 text-[10px] text-white/40"><span className="w-2 h-2 rounded-full bg-white/20" />New</span>
-            </div>
-          </div>
-
-          {/* Category Filter */}
-          <div className="rounded-xl bg-white/5 border border-white/10 p-4">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-sm font-bold text-white">Categories</h3>
-              <div className="flex gap-2">
-                <button onClick={selectAll} className="text-[10px] text-uga-red hover:text-uga-red/80 font-semibold">All</button>
-                <button onClick={deselectAll} className="text-[10px] text-white/40 hover:text-white/60 font-semibold">None</button>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {CATEGORIES.map(cat => {
-                const cc = CATEGORY_COLORS[cat] || CATEGORY_COLORS["Society"];
-                const active = selectedCategories.has(cat);
-                const count = VOCABULARY_DATA.filter(w => w.category === cat).length;
-                return (
-                  <button
-                    key={cat}
-                    onClick={() => toggleCategory(cat)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border
-                      ${active
-                        ? `${cc.bg} ${cc.border} ${cc.text}`
-                        : "bg-white/5 border-white/10 text-white/30"
-                      }`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${active ? cc.dot : "bg-white/20"}`} />
-                    {cat}
-                    <span className="text-[10px] opacity-60">({count})</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Reset */}
-          <div className="flex justify-end">
-            {!showResetConfirm ? (
-              <button
-                onClick={() => setShowResetConfirm(true)}
-                className="flex items-center gap-1.5 text-xs text-white/30 hover:text-uga-red transition-colors"
-              >
-                <Icons.Reset /> Reset all progress
-              </button>
-            ) : (
-              <div className="flex items-center gap-2 animate-slide-in">
-                <span className="text-xs text-uga-red font-medium">Are you sure?</span>
-                <button
-                  onClick={() => { onReset(); setShowResetConfirm(false); }}
-                  className="px-3 py-1 bg-uga-red text-white text-xs font-bold rounded-lg"
-                >
-                  Yes, reset
-                </button>
-                <button
-                  onClick={() => setShowResetConfirm(false)}
-                  className="px-3 py-1 bg-white/10 text-white text-xs rounded-lg"
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
+      {/* Main */}
+      <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8">
+        {/* Mobile top bar */}
+        <div className="w-full max-w-xl mb-4 flex items-center justify-between lg:hidden">
+          <button onClick={() => setView("home")} className="text-xs text-white/30 hover:text-white/50">&larr; Back</button>
+          <div className="flex gap-3 text-[11px]">
+            <span className="text-emerald-400 font-bold">{sessionCorrect} ✓</span>
+            <span className="text-red-400 font-bold">{sessionWrong} ✗</span>
           </div>
         </div>
-      );
-    }
 
-    function StatCard({ label, count, total, color, textColor }) {
-      return (
-        <div className="rounded-xl bg-white/5 border border-white/10 p-4 text-center">
-          <div className={`text-2xl font-black ${textColor}`}>{count}</div>
-          <div className="text-[10px] text-white/40 font-medium mt-1">{label}</div>
-          <div className={`h-1 rounded-full mt-2 bg-white/5 overflow-hidden`}>
-            <div className={`h-full rounded-full ${color} progress-bar-fill`} style={{ width: `${total > 0 ? (count / total) * 100 : 0}%` }} />
+        {/* Progress ribbon */}
+        <div className="w-full max-w-xl mb-1 flex items-center gap-3">
+          <div className="flex-1 h-1.5 rounded-full bg-white/[.06] overflow-hidden">
+            <div className="h-full rounded-full bg-uga-red bar-fill" style={{ width: `${(idx + 1) / queue.length * 100}%` }} />
           </div>
+          <span className="text-[10px] text-white/25 font-mono shrink-0">{idx + 1}/{queue.length}</span>
         </div>
-      );
-    }
 
-    // ═══════════════════════════════════════════════════════════════
-    // LEARN VIEW — Adaptive SRS with 3 Phases
-    // ═══════════════════════════════════════════════════════════════
-    function LearnView({ selectedCategories, wordStates, updateWordState, onBack }) {
-      const [queue, setQueue] = useState([]);
-      const [currentIdx, setCurrentIdx] = useState(0);
-      const [feedback, setFeedback] = useState(null); // { correct: bool, message: string }
-      const [sessionStats, setSessionStats] = useState({ correct: 0, incorrect: 0, seen: 0 });
-      const [sessionComplete, setSessionComplete] = useState(false);
+        {/* Badges */}
+        <div className="mb-5 flex items-center gap-2 flex-wrap justify-center">
+          <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+            currentLevel === 0 ? "bg-blue-900/40 text-blue-300 border-blue-700/40" : "bg-amber-900/40 text-amber-300 border-amber-700/40"
+          }`}>
+            {currentLevel === 0 ? "Level 0 · Multiple Choice" : "Level 1 · Type the Answer"}
+          </span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${catStyle.badge}`}>{current.cat}</span>
+        </div>
 
-      // Build study queue using Leitner system
-      const buildQueue = useCallback(() => {
-        const eligible = VOCABULARY_DATA.filter(w => selectedCategories.has(w.category));
-        if (eligible.length === 0) return [];
+        {/* Question Card */}
+        {currentLevel === 0 ? (
+          <QuestionCardMC key={`mc-${current.id}-${idx}`} word={current}
+            onCorrect={() => { handleCorrect(current.id); setTimeout(advance, 750); }}
+            onWrong={() => { handleWrong(current.id); setTimeout(advance, 1800); }} />
+        ) : (
+          <QuestionCardType key={`type-${current.id}-${idx}`} word={current}
+            onCorrect={() => handleCorrect(current.id)}
+            onWrong={() => handleWrong(current.id)}
+            advance={advance} />
+        )}
 
-        // Sort by Leitner box (lower first), then by wrong count (higher first), then randomize within same priority
-        const sorted = eligible.map(w => ({
-          ...w,
-          state: wordStates[w.id] || getDefaultWordState()
-        }));
+        {/* Mobile mini bars */}
+        <div className="w-full max-w-xl mt-8 grid grid-cols-3 gap-2 lg:hidden">
+          <MiniBar label="New" n={sideStats.ns} total={sideStats.total} barCls="bg-white/20" />
+          <MiniBar label="Learning" n={sideStats.lr} total={sideStats.total} barCls="bg-amber-500" />
+          <MiniBar label="Mastered" n={sideStats.ma} total={sideStats.total} barCls="bg-emerald-500" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
-        // Separate into priority groups
-        const unmastered = sorted.filter(w => w.state.mastery_level < 3);
-        const mastered = sorted.filter(w => w.state.mastery_level >= 3);
+function SideBar({ label, n, total, barCls, txtCls }) {
+  return (
+    <div className="mb-3">
+      <div className="flex justify-between items-baseline mb-1">
+        <span className="text-[11px] font-semibold text-white/50">{label}</span>
+        <span className={`text-xs font-black ${txtCls}`}>{n}</span>
+      </div>
+      <div className="h-2 rounded-full bg-white/[.05] overflow-hidden">
+        <div className={`h-full rounded-full ${barCls} bar-fill`} style={{ width: `${total ? n / total * 100 : 0}%` }} />
+      </div>
+    </div>
+  );
+}
 
-        // For unmastered: sort by box (lower = more urgent), then by wrong count
-        unmastered.sort((a, b) => {
-          if (a.state.leitnerBox !== b.state.leitnerBox) return a.state.leitnerBox - b.state.leitnerBox;
-          if (a.state.wrongCount !== b.state.wrongCount) return b.state.wrongCount - a.state.wrongCount;
-          return Math.random() - 0.5;
-        });
+function MiniBar({ label, n, total, barCls }) {
+  return (
+    <div className="rounded-lg bg-white/[.03] border border-white/[.06] p-2 text-center">
+      <div className="text-xs font-black text-white/60">{n}</div>
+      <div className="text-[9px] text-white/25">{label}</div>
+      <div className="h-1 rounded-full bg-white/[.04] mt-1 overflow-hidden">
+        <div className={`h-full ${barCls} bar-fill rounded-full`} style={{ width: `${total ? n / total * 100 : 0}%` }} />
+      </div>
+    </div>
+  );
+}
 
-        // Take at most 20 unmastered words per session, plus a few mastered ones for review
-        const sessionWords = [
-          ...unmastered.slice(0, 20),
-          ...shuffle(mastered).slice(0, 5)
-        ];
+/* ══════════════════════════════════════════════════════════════════
+   ███  QUESTION CARD — Multiple Choice  (Level 0)  ███
+   Shows SPANISH term → user picks correct ENGLISH meaning.
+   ══════════════════════════════════════════════════════════════════ */
+function QuestionCardMC({ word, onCorrect, onWrong }) {
+  const [options, setOptions] = useState([]);
+  const [picked, setPicked] = useState(null);
+  const [isCorrect, setIsCorrect] = useState(null);
 
-        return shuffle(sessionWords);
-      }, [selectedCategories, wordStates]);
+  useEffect(() => {
+    const pool = VOCAB.filter(w => w.id !== word.id);
+    const distractors = shuffle(pool).slice(0, 3).map(w => w.definition);
+    setOptions(shuffle([word.definition, ...distractors]));
+    setPicked(null);
+    setIsCorrect(null);
+  }, [word.id]);
 
-      useEffect(() => {
-        const q = buildQueue();
-        setQueue(q);
-        setCurrentIdx(0);
-        setSessionStats({ correct: 0, incorrect: 0, seen: 0 });
-        setSessionComplete(false);
-        setFeedback(null);
-      }, [selectedCategories]);
+  const pick = (opt) => {
+    if (picked !== null) return;
+    setPicked(opt);
+    if (opt === word.definition) { setIsCorrect(true); onCorrect(); }
+    else { setIsCorrect(false); onWrong(); }
+  };
 
-      const currentWord = queue[currentIdx];
-      const currentState = currentWord ? (wordStates[currentWord.id] || getDefaultWordState()) : null;
-
-      const advanceToNext = useCallback(() => {
-        setFeedback(null);
-        if (currentIdx + 1 >= queue.length) {
-          setSessionComplete(true);
-        } else {
-          setCurrentIdx(prev => prev + 1);
-        }
-      }, [currentIdx, queue.length]);
-
-      const handleCorrect = useCallback((wordId) => {
-        const state = wordStates[wordId] || getDefaultWordState();
-        const updates = { ...state, lastSeen: Date.now() };
-
-        if (state.phase === 1) {
-          updates.mcCorrectStreak = state.mcCorrectStreak + 1;
-          if (updates.mcCorrectStreak >= 2) {
-            updates.phase = 2;
-            updates.mastery_level = Math.max(state.mastery_level, 1);
+  return (
+    <div className="w-full max-w-xl anim-scale-in">
+      <div className="text-center mb-8">
+        <p className="text-xs text-white/30 mb-2 font-medium">What does this mean?</p>
+        <h2 className="text-3xl sm:text-4xl font-black text-white leading-tight">{word.term}</h2>
+      </div>
+      <div className="grid gap-3">
+        {options.map((opt, i) => {
+          let cls = "bg-white/[.04] border-white/[.08] text-white/80 hover:bg-white/[.07] hover:border-white/[.15] cursor-pointer";
+          if (picked !== null) {
+            if (opt === word.definition) cls = "bg-emerald-500/15 border-emerald-500/60 text-emerald-300";
+            else if (opt === picked) cls = "bg-red-500/15 border-red-500/60 text-red-300 anim-shake";
+            else cls = "bg-white/[.02] border-white/[.04] text-white/15";
           }
-        } else if (state.phase === 2) {
-          updates.fcCorrectCount = state.fcCorrectCount + 1;
-          if (updates.fcCorrectCount >= 2) {
-            updates.phase = 3;
-            updates.mastery_level = Math.max(state.mastery_level, 2);
-          }
-        } else if (state.phase === 3) {
-          updates.mastery_level = 3;
-          updates.leitnerBox = Math.min(state.leitnerBox + 1, 4);
-        }
-
-        updateWordState(wordId, updates);
-        setSessionStats(prev => ({ ...prev, correct: prev.correct + 1, seen: prev.seen + 1 }));
-        setFeedback({ correct: true, message: "Correct!" });
-        setTimeout(advanceToNext, 800);
-      }, [wordStates, updateWordState, advanceToNext]);
-
-      const handleIncorrect = useCallback((wordId) => {
-        const state = wordStates[wordId] || getDefaultWordState();
-        const updates = {
-          ...state,
-          lastSeen: Date.now(),
-          wrongCount: state.wrongCount + 1,
-          leitnerBox: 0, // Reset to box 0 on wrong answer
-          mcCorrectStreak: 0,
-          fcCorrectCount: 0,
-        };
-
-        // Demote phase if they got it wrong
-        if (state.phase > 1) {
-          updates.phase = state.phase - 1;
-          updates.mastery_level = Math.max(0, state.mastery_level - 1);
-        } else {
-          updates.mastery_level = 0;
-        }
-
-        updateWordState(wordId, updates);
-        setSessionStats(prev => ({ ...prev, incorrect: prev.incorrect + 1, seen: prev.seen + 1 }));
-
-        // Re-insert at a near-front position (Leitner: missed words return to front)
-        setQueue(prev => {
-          const newQ = [...prev];
-          const word = newQ[currentIdx];
-          // Insert 3-5 positions ahead
-          const insertAt = Math.min(currentIdx + 3 + Math.floor(Math.random() * 3), newQ.length);
-          newQ.splice(insertAt, 0, { ...word });
-          return newQ;
-        });
-      }, [wordStates, updateWordState, currentIdx]);
-
-      const restartSession = () => {
-        const q = buildQueue();
-        setQueue(q);
-        setCurrentIdx(0);
-        setSessionStats({ correct: 0, incorrect: 0, seen: 0 });
-        setSessionComplete(false);
-        setFeedback(null);
-      };
-
-      if (queue.length === 0) {
-        return (
-          <div className="animate-slide-in text-center py-20">
-            <div className="text-6xl mb-4">📚</div>
-            <h2 className="text-xl font-bold text-white mb-2">No words to study</h2>
-            <p className="text-white/50 text-sm mb-6">Select at least one category from the Home screen.</p>
-            <button onClick={onBack} className="px-6 py-2 bg-uga-red text-white font-bold rounded-xl">← Go Back</button>
-          </div>
-        );
-      }
-
-      if (sessionComplete) {
-        return (
-          <div className="animate-slide-in text-center py-16">
-            <div className="text-6xl mb-4">🎉</div>
-            <h2 className="text-2xl font-black text-white mb-2">Session Complete!</h2>
-            <p className="text-white/50 text-sm mb-8">Great work on this round.</p>
-            <div className="grid grid-cols-3 gap-3 max-w-sm mx-auto mb-8">
-              <div className="rounded-xl bg-white/5 border border-white/10 p-4 text-center">
-                <div className="text-2xl font-black text-white">{sessionStats.seen}</div>
-                <div className="text-[10px] text-white/40">Reviewed</div>
-              </div>
-              <div className="rounded-xl bg-emerald-900/30 border border-emerald-800 p-4 text-center">
-                <div className="text-2xl font-black text-emerald-400">{sessionStats.correct}</div>
-                <div className="text-[10px] text-emerald-400/60">Correct</div>
-              </div>
-              <div className="rounded-xl bg-red-900/30 border border-red-800 p-4 text-center">
-                <div className="text-2xl font-black text-red-400">{sessionStats.incorrect}</div>
-                <div className="text-[10px] text-red-400/60">Missed</div>
-              </div>
-            </div>
-            <div className="flex justify-center gap-3">
-              <button onClick={restartSession} className="px-6 py-2.5 bg-uga-red text-white font-bold rounded-xl hover:bg-uga-red-dark transition-colors">
-                Study Again
-              </button>
-              <button onClick={onBack} className="px-6 py-2.5 bg-white/10 text-white font-bold rounded-xl hover:bg-white/15 transition-colors">
-                ← Home
-              </button>
-            </div>
-          </div>
-        );
-      }
-
-      const phaseLabels = { 1: "Multiple Choice", 2: "Flashcard", 3: "Written Recall" };
-      const phaseColors = { 1: "text-blue-400", 2: "text-amber-400", 3: "text-emerald-400" };
-      const phaseBgColors = { 1: "bg-blue-500", 2: "bg-amber-500", 3: "bg-emerald-500" };
-
-      return (
-        <div className="animate-slide-in">
-          {/* Session header */}
-          <div className="flex items-center justify-between mb-4">
-            <button onClick={onBack} className="text-xs text-white/40 hover:text-white transition-colors">← Back</button>
-            <div className="flex items-center gap-3">
-              <span className={`text-xs font-semibold ${phaseColors[currentState?.phase || 1]}`}>
-                Phase {currentState?.phase || 1}: {phaseLabels[currentState?.phase || 1]}
-              </span>
-              <span className="text-xs text-white/30">{currentIdx + 1}/{queue.length}</span>
-            </div>
-          </div>
-
-          {/* Progress bar for session */}
-          <div className="h-1.5 bg-white/5 rounded-full overflow-hidden mb-6">
-            <div
-              className={`h-full rounded-full ${phaseBgColors[currentState?.phase || 1]} progress-bar-fill`}
-              style={{ width: `${((currentIdx + 1) / queue.length) * 100}%` }}
-            />
-          </div>
-
-          {/* Category badge */}
-          {currentWord && (
-            <div className="flex justify-center mb-4">
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${(CATEGORY_COLORS[currentWord.category] || CATEGORY_COLORS["Society"]).bg} ${(CATEGORY_COLORS[currentWord.category] || CATEGORY_COLORS["Society"]).text} border ${(CATEGORY_COLORS[currentWord.category] || CATEGORY_COLORS["Society"]).border}`}>
-                {currentWord.category}
-              </span>
-            </div>
-          )}
-
-          {/* Phase-specific content */}
-          {currentState?.phase === 1 && (
-            <MultipleChoicePhase
-              word={currentWord}
-              onCorrect={() => handleCorrect(currentWord.id)}
-              onIncorrect={() => handleIncorrect(currentWord.id)}
-              feedback={feedback}
-              setFeedback={setFeedback}
-              advanceToNext={advanceToNext}
-              selectedCategories={selectedCategories}
-            />
-          )}
-          {currentState?.phase === 2 && (
-            <FlashcardPhase
-              word={currentWord}
-              onCorrect={() => handleCorrect(currentWord.id)}
-              onIncorrect={() => handleIncorrect(currentWord.id)}
-              feedback={feedback}
-            />
-          )}
-          {currentState?.phase === 3 && (
-            <WrittenRecallPhase
-              word={currentWord}
-              onCorrect={() => handleCorrect(currentWord.id)}
-              onIncorrect={() => handleIncorrect(currentWord.id)}
-              feedback={feedback}
-              setFeedback={setFeedback}
-              advanceToNext={advanceToNext}
-            />
-          )}
-
-          {/* Mastery indicator */}
-          {currentState && (
-            <div className="flex justify-center mt-6 gap-1">
-              {[0, 1, 2, 3].map(level => (
-                <div
-                  key={level}
-                  className={`w-2 h-2 rounded-full transition-colors ${
-                    currentState.mastery_level >= level
-                      ? level === 3 ? "bg-emerald-400" : level >= 1 ? "bg-amber-400" : "bg-white/40"
-                      : "bg-white/10"
-                  }`}
-                />
-              ))}
-              <span className="text-[10px] text-white/30 ml-2">
-                Mastery {currentState.mastery_level}/3
-              </span>
-            </div>
-          )}
+          return (
+            <button key={i} onClick={() => pick(opt)} disabled={picked !== null}
+              className={`w-full text-left px-5 py-4 rounded-xl border-2 font-medium text-sm transition-all disabled:cursor-default ${cls}`}>
+              <span className="text-white/20 font-bold mr-3 text-xs">{String.fromCharCode(65 + i)}</span>{opt}
+            </button>
+          );
+        })}
+      </div>
+      {isCorrect !== null && (
+        <div className={`mt-5 text-center text-sm font-bold anim-fade-up ${isCorrect ? "text-emerald-400" : "text-red-400"}`}>
+          {isCorrect ? "✓ Correct! Advancing to Level 1." : `✗ Incorrect — the answer was "${word.definition}"`}
         </div>
-      );
-    }
+      )}
+    </div>
+  );
+}
 
-    // ═══════════════════════════════════════════════════════════════
-    // PHASE 1: Multiple Choice
-    // ═══════════════════════════════════════════════════════════════
-    function MultipleChoicePhase({ word, onCorrect, onIncorrect, feedback, setFeedback, advanceToNext, selectedCategories }) {
-      const [options, setOptions] = useState([]);
-      const [selected, setSelected] = useState(null);
+/* ══════════════════════════════════════════════════════════════════
+   ███  QUESTION CARD — Type the Answer  (Level 1 → 3)  ███
+   Shows ENGLISH definition → user types SPANISH term.
+   Features: accent detection, correction mode, accent shortcut bar.
+   ══════════════════════════════════════════════════════════════════ */
+function QuestionCardType({ word, onCorrect, onWrong, advance }) {
+  const inputRef = useRef(null);
+  const [input, setInput] = useState("");
+  const [phase, setPhase] = useState("answer");
+  const [shaking, setShaking] = useState(false);
 
-      useEffect(() => {
-        // Generate 4 options including the correct answer
-        const eligible = VOCABULARY_DATA.filter(w => w.id !== word.id && selectedCategories.has(w.category));
-        const distractors = shuffle(eligible).slice(0, 3).map(w => w.definition);
-        const opts = shuffle([word.definition, ...distractors]);
-        setOptions(opts);
-        setSelected(null);
-      }, [word.id]);
+  useEffect(() => {
+    setInput("");
+    setPhase("answer");
+    setShaking(false);
+    setTimeout(() => inputRef.current?.focus(), 120);
+  }, [word.id]);
 
-      const handleSelect = (opt) => {
-        if (selected !== null) return;
-        setSelected(opt);
-        if (opt === word.definition) {
-          onCorrect();
-        } else {
-          setFeedback({ correct: false, message: `The answer is: ${word.definition}` });
-          onIncorrect();
-          setTimeout(advanceToNext, 2000);
-        }
-      };
+  const correctAnswer = word.term;
 
-      return (
-        <div className="animate-slide-in max-w-lg mx-auto">
-          <div className="text-center mb-8">
-            <p className="text-xs text-white/40 mb-2">What does this mean?</p>
-            <h2 className="text-3xl font-black text-white">{word.term}</h2>
-          </div>
+  const checkAnswer = (val) => {
+    const trimmed = val.trim();
+    if (trimmed.toLowerCase() === correctAnswer.toLowerCase()) return "correct";
+    if (diffIsAccentsOnly(trimmed, correctAnswer)) return "accentWarn";
+    return "wrong";
+  };
 
-          <div className="space-y-3">
-            {options.map((opt, i) => {
-              let btnClass = "bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/20";
-              if (selected !== null) {
-                if (opt === word.definition) {
-                  btnClass = "bg-emerald-900/40 border-emerald-500 text-emerald-300";
-                } else if (opt === selected) {
-                  btnClass = "bg-red-900/40 border-red-500 text-red-300";
-                } else {
-                  btnClass = "bg-white/5 border-white/5 text-white/20";
-                }
-              }
-              return (
-                <button
-                  key={i}
-                  onClick={() => handleSelect(opt)}
-                  disabled={selected !== null}
-                  className={`w-full text-left px-5 py-4 rounded-xl border-2 transition-all font-medium text-sm ${btnClass}`}
-                >
-                  <span className="text-white/30 mr-3 font-bold">{String.fromCharCode(65 + i)}</span>
-                  {opt}
-                </button>
-              );
-            })}
-          </div>
+  /* Insert accent at cursor position */
+  const insertChar = (ch) => {
+    const el = inputRef.current;
+    if (!el) { setInput(p => p + ch); return; }
+    const start = el.selectionStart ?? input.length;
+    const end = el.selectionEnd ?? input.length;
+    const newVal = input.slice(0, start) + ch + input.slice(end);
+    setInput(newVal);
+    // Restore cursor after React re-render
+    setTimeout(() => {
+      el.focus();
+      el.setSelectionRange(start + ch.length, start + ch.length);
+    }, 0);
+  };
 
-          {feedback && (
-            <div className={`mt-4 text-center text-sm font-semibold animate-slide-in ${feedback.correct ? "text-emerald-400" : "text-red-400"}`}>
-              {feedback.message}
-            </div>
-          )}
-        </div>
-      );
-    }
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!input.trim()) return;
 
-    // ═══════════════════════════════════════════════════════════════
-    // PHASE 2: Self-Assessment Flashcard
-    // ═══════════════════════════════════════════════════════════════
-    function FlashcardPhase({ word, onCorrect, onIncorrect, feedback }) {
-      const [flipped, setFlipped] = useState(false);
-      const [answered, setAnswered] = useState(false);
-
-      useEffect(() => {
-        setFlipped(false);
-        setAnswered(false);
-      }, [word.id]);
-
-      const handleKnew = () => {
-        if (answered) return;
-        setAnswered(true);
-        onCorrect();
-      };
-
-      const handleDidntKnow = () => {
-        if (answered) return;
-        setAnswered(true);
-        onIncorrect();
-      };
-
-      return (
-        <div className="animate-slide-in max-w-lg mx-auto">
-          <p className="text-center text-xs text-white/40 mb-4">Think of the meaning, then flip to check</p>
-
-          {/* Flashcard */}
-          <div className="card-flip h-56 cursor-pointer mb-6" onClick={() => setFlipped(!flipped)}>
-            <div className={`card-flip-inner w-full h-full ${flipped ? "flipped" : ""}`}>
-              {/* Front */}
-              <div className="card-face w-full h-full rounded-2xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex flex-col items-center justify-center p-6">
-                <p className="text-xs text-white/40 mb-3">Spanish</p>
-                <h2 className="text-3xl font-black text-white text-center">{word.term}</h2>
-                <p className="text-xs text-white/20 mt-4 flex items-center gap-1"><Icons.Flip /> Tap to flip</p>
-              </div>
-              {/* Back */}
-              <div className="card-face card-back w-full h-full rounded-2xl bg-gradient-to-br from-uga-red/20 to-uga-red-dark/20 border border-uga-red/30 flex flex-col items-center justify-center p-6">
-                <p className="text-xs text-uga-red/60 mb-3">English</p>
-                <h2 className="text-2xl font-black text-white text-center">{word.definition}</h2>
-              </div>
-            </div>
-          </div>
-
-          {/* Self-Assessment Buttons (only show after flip) */}
-          {flipped && !answered && (
-            <div className="flex gap-3 justify-center animate-slide-in">
-              <button
-                onClick={handleDidntKnow}
-                className="flex items-center gap-2 px-6 py-3 bg-red-900/30 border border-red-800 text-red-300 font-bold rounded-xl hover:bg-red-900/50 transition-colors"
-              >
-                <Icons.X /> Didn't Know
-              </button>
-              <button
-                onClick={handleKnew}
-                className="flex items-center gap-2 px-6 py-3 bg-emerald-900/30 border border-emerald-800 text-emerald-300 font-bold rounded-xl hover:bg-emerald-900/50 transition-colors"
-              >
-                <Icons.Check /> Knew It
-              </button>
-            </div>
-          )}
-
-          {feedback && (
-            <div className={`mt-4 text-center text-sm font-semibold animate-slide-in ${feedback.correct ? "text-emerald-400" : "text-red-400"}`}>
-              {feedback.correct ? "Nice! Keep it up." : "No worries — we'll review it again soon."}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // PHASE 3: Written Recall (accent-aware)
-    // ═══════════════════════════════════════════════════════════════
-    function WrittenRecallPhase({ word, onCorrect, onIncorrect, feedback, setFeedback, advanceToNext }) {
-      const inputRef = useRef(null);
-      const [input, setInput] = useState("");
-      const [submitted, setSubmitted] = useState(false);
-
-      useEffect(() => {
+    if (phase === "correction") {
+      const res = checkAnswer(input);
+      if (res === "correct" || res === "accentWarn") {
+        setPhase("correctionDone");
+        setTimeout(advance, 700);
+      } else {
+        setShaking(true);
+        setTimeout(() => setShaking(false), 500);
         setInput("");
-        setSubmitted(false);
-        // Focus input when word changes
-        setTimeout(() => inputRef.current?.focus(), 100);
-      }, [word.id]);
+      }
+      return;
+    }
 
-      const normalizeForComparison = (str) => {
-        // Keep accents, but normalize casing
-        return str.trim().toLowerCase();
-      };
+    if (phase === "accentWarn") {
+      const res = checkAnswer(input);
+      if (res === "correct") {
+        setPhase("correct");
+        onCorrect();
+        setTimeout(advance, 900);
+      } else {
+        setPhase("wrong");
+        onWrong();
+        setTimeout(() => { setPhase("correction"); setInput(""); setTimeout(() => inputRef.current?.focus(), 100); }, 1500);
+      }
+      return;
+    }
 
-      const handleSubmit = (e) => {
-        e.preventDefault();
-        if (submitted || !input.trim()) return;
-        setSubmitted(true);
+    const result = checkAnswer(input);
+    if (result === "correct") {
+      setPhase("correct");
+      onCorrect();
+      setTimeout(advance, 900);
+    } else if (result === "accentWarn") {
+      setPhase("accentWarn");
+      setInput("");
+      setTimeout(() => inputRef.current?.focus(), 100);
+    } else {
+      setPhase("wrong");
+      onWrong();
+      setTimeout(() => { setPhase("correction"); setInput(""); setTimeout(() => inputRef.current?.focus(), 100); }, 1500);
+    }
+  };
 
-        const userAnswer = normalizeForComparison(input);
-        const correctAnswer = normalizeForComparison(word.term);
+  const hint = correctAnswer.split("").map((ch, i) =>
+    i === 0 || ch === " " || "/()¡¿!".includes(ch) ? ch : "·"
+  ).join("");
 
-        // Check if correct (ignore capitalization, check accents)
-        if (userAnswer === correctAnswer) {
-          onCorrect();
-        } else {
-          setFeedback({ correct: false, message: `Correct answer: ${word.term}` });
-          onIncorrect();
-          setTimeout(advanceToNext, 2500);
-        }
-      };
+  const isLocked = phase === "correct" || phase === "correctionDone";
 
-      // Build a hint: show first letter and underscores
-      const hint = word.term.split("").map((ch, i) => {
-        if (i === 0 || ch === " " || ch === "/" || ch === "(" || ch === ")") return ch;
-        return "_";
-      }).join("");
+  const inputCls = (() => {
+    if (isLocked && phase === "correct") return "bg-emerald-900/20 border-emerald-500/50 text-emerald-300";
+    if (isLocked) return "bg-white/[.03] border-white/[.08] text-white/40";
+    if (phase === "correction") return "bg-red-900/10 border-red-800/40 text-white focus:border-red-500/60";
+    if (phase === "accentWarn") return "bg-amber-900/10 border-amber-700/40 text-white focus:border-amber-500/60";
+    return "bg-white/[.04] border-white/[.08] text-white focus:border-uga-red/60";
+  })();
 
-      return (
-        <div className="animate-slide-in max-w-lg mx-auto">
-          <div className="text-center mb-6">
-            <p className="text-xs text-white/40 mb-2">Type the Spanish term for:</p>
-            <h2 className="text-2xl font-black text-white mb-2">{word.definition}</h2>
-            <p className="text-xs text-white/20 font-mono tracking-widest">{hint}</p>
-          </div>
+  return (
+    <div className={`w-full max-w-xl anim-scale-in ${shaking ? "anim-shake" : ""}`}>
+      <div className="text-center mb-6">
+        <p className="text-xs text-white/30 mb-2 font-medium">Type the Spanish term for:</p>
+        <h2 className="text-2xl sm:text-3xl font-black text-white mb-2 leading-tight">{word.definition}</h2>
+        <p className="text-xs text-white/15 font-mono tracking-[.2em]">{hint}</p>
+      </div>
 
-          <form onSubmit={handleSubmit}>
-            <div className="relative">
-              <input
-                ref={inputRef}
-                type="text"
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                disabled={submitted}
-                placeholder="Type your answer..."
-                className={`w-full px-5 py-4 rounded-xl bg-white/5 border-2 text-white font-medium text-center text-lg outline-none transition-all
-                  ${submitted
-                    ? feedback?.correct
-                      ? "border-emerald-500 bg-emerald-900/20"
-                      : "border-red-500 bg-red-900/20"
-                    : "border-white/10 focus:border-uga-red"
-                  }`}
-                autoComplete="off"
-                autoCapitalize="off"
-                spellCheck="false"
-              />
-            </div>
+      {phase === "accentWarn" && (
+        <div className="mb-4 px-4 py-3 rounded-xl bg-amber-900/30 border border-amber-700/40 anim-fade-up">
+          <p className="text-amber-300 text-sm font-bold mb-0.5">⚠ Almost! Check your accents.</p>
+          <p className="text-amber-200/60 text-xs">Your answer is close but missing accented characters. Use the buttons below and try once more.</p>
+        </div>
+      )}
 
-            {!submitted && (
-              <button
-                type="submit"
-                disabled={!input.trim()}
-                className="w-full mt-3 py-3 bg-uga-red text-white font-bold rounded-xl hover:bg-uga-red-dark transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                Check Answer
+      {(phase === "wrong" || phase === "correction") && (
+        <div className="mb-4 px-4 py-3 rounded-xl bg-red-900/20 border border-red-800/40 anim-fade-up">
+          <p className="text-red-400 text-sm font-bold mb-1">✗ Incorrect. The correct answer is:</p>
+          <p className="text-red-300 text-xl font-black tracking-wide my-1">{correctAnswer}</p>
+          {phase === "correction" && <p className="text-red-300/50 text-xs mt-1">Now type it correctly below to continue.</p>}
+        </div>
+      )}
+
+      {phase === "correct" && (
+        <div className="mb-4 px-4 py-3 rounded-xl bg-emerald-900/20 border border-emerald-700/40 anim-fade-up">
+          <p className="text-emerald-400 text-sm font-bold">✓ Mastered! Excellent recall.</p>
+        </div>
+      )}
+      {phase === "correctionDone" && (
+        <div className="mb-4 px-4 py-3 rounded-xl bg-white/[.04] border border-white/[.08] anim-fade-up">
+          <p className="text-white/50 text-sm font-semibold">Got it. This word returns to Multiple Choice.</p>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit}>
+        <input ref={inputRef} type="text" value={input} onChange={e => setInput(e.target.value)}
+          disabled={isLocked}
+          placeholder={phase === "correction" ? "Re-type the correct answer..." : "Type your answer..."}
+          autoComplete="off" autoCapitalize="off" spellCheck="false"
+          className={`w-full px-5 py-4 rounded-xl text-center text-lg font-semibold outline-none transition-all border-2 ${inputCls}`} />
+
+        {/* Accent Shortcut Bar */}
+        {!isLocked && (
+          <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+            {["á","é","í","ó","ú","ñ","ü","¿","¡"].map(ch => (
+              <button key={ch} type="button" onClick={() => insertChar(ch)}
+                className="w-11 h-11 sm:w-10 sm:h-10 rounded-lg bg-white/[.06] border border-white/[.08] text-white font-bold text-base sm:text-sm hover:bg-white/[.12] hover:border-white/[.15] transition-all active:scale-90 select-none touch-manipulation">
+                {ch}
               </button>
-            )}
-          </form>
-
-          {feedback && (
-            <div className={`mt-4 text-center text-sm font-semibold animate-slide-in ${feedback.correct ? "text-emerald-400" : "text-red-400"}`}>
-              {feedback.message}
-            </div>
-          )}
-
-          {/* Accent helper keyboard */}
-          {!submitted && (
-            <div className="mt-4">
-              <p className="text-[10px] text-white/30 text-center mb-2">Special characters:</p>
-              <div className="flex flex-wrap justify-center gap-1.5">
-                {["á", "é", "í", "ó", "ú", "ñ", "ü", "¡", "¿"].map(ch => (
-                  <button
-                    key={ch}
-                    type="button"
-                    onClick={() => {
-                      setInput(prev => prev + ch);
-                      inputRef.current?.focus();
-                    }}
-                    className="w-9 h-9 rounded-lg bg-white/10 border border-white/10 text-white font-bold text-sm hover:bg-white/20 transition-colors"
-                  >
-                    {ch}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // BROWSE VIEW
-    // ═══════════════════════════════════════════════════════════════
-    function BrowseView({ wordStates, selectedCategories, toggleCategory, selectAll, deselectAll }) {
-      const [search, setSearch] = useState("");
-      const [expandedCat, setExpandedCat] = useState(null);
-
-      const filtered = VOCABULARY_DATA.filter(w => {
-        if (!selectedCategories.has(w.category)) return false;
-        if (search) {
-          const q = search.toLowerCase();
-          return w.term.toLowerCase().includes(q) || w.definition.toLowerCase().includes(q);
-        }
-        return true;
-      });
-
-      const grouped = {};
-      filtered.forEach(w => {
-        if (!grouped[w.category]) grouped[w.category] = [];
-        grouped[w.category].push(w);
-      });
-
-      const masteryLabel = (level) => {
-        if (level === 0) return { text: "New", cls: "text-white/30 bg-white/5" };
-        if (level === 1) return { text: "Phase 1", cls: "text-blue-400 bg-blue-900/30" };
-        if (level === 2) return { text: "Phase 2", cls: "text-amber-400 bg-amber-900/30" };
-        return { text: "Mastered", cls: "text-emerald-400 bg-emerald-900/30" };
-      };
-
-      return (
-        <div className="animate-slide-in space-y-4">
-          <h2 className="text-xl font-black text-white">Browse Vocabulary</h2>
-
-          {/* Search */}
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search terms or definitions..."
-            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm outline-none focus:border-uga-red transition-colors"
-          />
-
-          {/* Category filter chips */}
-          <div className="flex flex-wrap gap-2">
-            <button onClick={selectAll} className="text-[10px] text-uga-red font-semibold px-2 py-1 rounded-md hover:bg-uga-red/10">All</button>
-            <button onClick={deselectAll} className="text-[10px] text-white/40 font-semibold px-2 py-1 rounded-md hover:bg-white/5">None</button>
-            {CATEGORIES.map(cat => {
-              const cc = CATEGORY_COLORS[cat] || CATEGORY_COLORS["Society"];
-              const active = selectedCategories.has(cat);
-              return (
-                <button
-                  key={cat}
-                  onClick={() => toggleCategory(cat)}
-                  className={`px-2.5 py-1 rounded-md text-[10px] font-medium transition-all border
-                    ${active ? `${cc.bg} ${cc.border} ${cc.text}` : "bg-white/5 border-white/10 text-white/30"}`}
-                >
-                  {cat}
-                </button>
-              );
-            })}
+            ))}
           </div>
+        )}
 
-          {/* Results count */}
-          <p className="text-xs text-white/40">{filtered.length} words</p>
+        {!isLocked && (
+          <button type="submit" disabled={!input.trim()}
+            className={`w-full mt-4 py-3.5 rounded-xl font-bold text-sm transition-all disabled:opacity-20 disabled:cursor-not-allowed ${
+              phase === "correction" ? "bg-red-600 hover:bg-red-500 text-white" : "bg-uga-red hover:bg-uga-red-dark text-white"
+            }`}>
+            {phase === "correction" ? "Submit Correction" : "Check Answer"}
+          </button>
+        )}
+      </form>
+    </div>
+  );
+}
 
-          {/* Grouped list */}
-          <div className="space-y-3">
-            {Object.entries(grouped).map(([cat, words]) => {
-              const cc = CATEGORY_COLORS[cat] || CATEGORY_COLORS["Society"];
-              const isExpanded = expandedCat === cat;
-              return (
-                <div key={cat} className={`rounded-xl border ${cc.border} ${cc.bg} overflow-hidden`}>
-                  <button
-                    onClick={() => setExpandedCat(isExpanded ? null : cat)}
-                    className="w-full px-4 py-3 flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${cc.dot}`} />
-                      <span className={`text-sm font-bold ${cc.text}`}>{cat}</span>
-                      <span className="text-xs text-white/30">({words.length})</span>
-                    </div>
-                    <span className={`text-xs ${cc.text} transition-transform ${isExpanded ? "rotate-180" : ""}`}>▼</span>
-                  </button>
-                  {isExpanded && (
-                    <div className="border-t border-white/5">
-                      {words.map(w => {
-                        const state = wordStates[w.id] || getDefaultWordState();
-                        const ml = masteryLabel(state.mastery_level);
-                        return (
-                          <div key={w.id} className="px-4 py-2.5 flex items-center justify-between border-b border-white/5 last:border-b-0 hover:bg-white/5 transition-colors">
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-semibold text-white truncate">{w.term}</div>
-                              <div className="text-xs text-white/40 truncate">{w.definition}</div>
-                            </div>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ml.cls} ml-2 whitespace-nowrap`}>
-                              {ml.text}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+/* ═══════════════════════ BROWSE PAGE ═══════════════════════ */
+function BrowsePage({ cats, toggle, setCats, ws }) {
+  const [search, setSearch] = useState("");
+  const [openCat, setOpenCat] = useState(null);
+
+  const filtered = VOCAB.filter(w => {
+    if (!cats.has(w.cat)) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return w.term.toLowerCase().includes(q) || w.definition.toLowerCase().includes(q);
+    }
+    return true;
+  });
+
+  const grouped = {};
+  filtered.forEach(w => { (grouped[w.cat] = grouped[w.cat] || []).push(w); });
+
+  const lvlBadge = (l) => {
+    if (l === 0) return ["New", "text-white/25 bg-white/[.04]"];
+    if (l === 1) return ["Learning", "text-amber-400 bg-amber-900/25"];
+    return ["Mastered", "text-emerald-400 bg-emerald-900/25"];
+  };
+
+  return (
+    <div className="flex-1 max-w-5xl mx-auto w-full px-4 py-8 space-y-5 anim-fade-up">
+      <h2 className="text-xl font-black text-white">Browse All Words</h2>
+      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search terms or definitions..."
+        className="w-full px-4 py-3 rounded-xl bg-white/[.04] border border-white/[.06] text-white text-sm outline-none focus:border-uga-red/50 transition" />
+      <div className="flex flex-wrap gap-1.5">
+        <button onClick={() => setCats(new Set(CATEGORIES))} className="text-[10px] font-bold text-uga-red px-2 py-0.5 rounded-md hover:bg-uga-red/10">All</button>
+        <button onClick={() => setCats(new Set())} className="text-[10px] font-bold text-white/25 px-2 py-0.5 rounded-md hover:bg-white/5">None</button>
+        {CATEGORIES.map(c => {
+          const s = CAT_STYLES[c]; const on = cats.has(c);
+          return (
+            <button key={c} onClick={() => toggle(c)}
+              className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border transition ${on ? s.chip : s.chipOff}`}>{c}</button>
+          );
+        })}
+      </div>
+      <p className="text-[11px] text-white/30">{filtered.length} words</p>
+      <div className="space-y-2.5">
+        {Object.entries(grouped).map(([cat, words]) => {
+          const s = CAT_STYLES[cat]; const isOpen = openCat === cat;
+          return (
+            <div key={cat} className={`rounded-xl border overflow-hidden ${s.group}`}>
+              <button onClick={() => setOpenCat(isOpen ? null : cat)} className="w-full px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${s.groupDot}`} />
+                  <span className={`text-sm font-bold ${s.groupTxt}`}>{cat}</span>
+                  <span className="text-[10px] text-white/25">({words.length})</span>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
+                <span className={`text-[10px] transition-transform ${s.groupArr} ${isOpen ? "rotate-180" : ""}`}>▼</span>
+              </button>
+              {isOpen && (
+                <div className="border-t border-white/[.04]">
+                  {words.map(w => {
+                    const [lbl, cls] = lvlBadge(ws[w.id]?.level ?? 0);
+                    return (
+                      <div key={w.id} className="px-4 py-2.5 flex items-center justify-between border-b border-white/[.03] last:border-0 hover:bg-white/[.02] transition">
+                        <div className="flex-1 min-w-0 mr-3">
+                          <div className="text-sm font-semibold text-white truncate">{w.term}</div>
+                          <div className="text-xs text-white/35 truncate">{w.definition}</div>
+                        </div>
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${cls}`}>{lbl}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
-    // ═══════════════════════════════════════════════════════════════
-    // RENDER
-    // ═══════════════════════════════════════════════════════════════
-    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-  </script>
+/* ═══════════════════════ RENDER ═══════════════════════ */
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <ToastProvider><AuthProvider><App /></AuthProvider></ToastProvider>
+);
+</script>
 </body>
 </html>
