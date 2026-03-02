@@ -1129,8 +1129,9 @@ function LearningEngine({ cats, ws, upd, setView }) {
         {/* Question Card */}
         {currentLevel === 0 ? (
           <QuestionCardMC key={`mc-${current.id}-${idx}`} word={current}
-            onCorrect={() => { handleCorrect(current.id); setTimeout(advance, 750); }}
-            onWrong={() => { handleWrong(current.id); setTimeout(advance, 1800); }} />
+            onCorrect={() => handleCorrect(current.id)}
+            onWrong={() => handleWrong(current.id)}
+            advance={advance} />
         ) : (
           <QuestionCardType key={`type-${current.id}-${idx}`} word={current}
             onCorrect={() => handleCorrect(current.id)}
@@ -1179,7 +1180,7 @@ function MiniBar({ label, n, total, barCls }) {
    ███  QUESTION CARD — Multiple Choice  (Level 0)  ███
    Shows SPANISH term → user picks correct ENGLISH meaning.
    ══════════════════════════════════════════════════════════════════ */
-function QuestionCardMC({ word, onCorrect, onWrong }) {
+function QuestionCardMC({ word, onCorrect, onWrong, advance }) {
   const [options, setOptions] = useState([]);
   const [picked, setPicked] = useState(null);
   const [isCorrect, setIsCorrect] = useState(null);
@@ -1222,8 +1223,14 @@ function QuestionCardMC({ word, onCorrect, onWrong }) {
         })}
       </div>
       {isCorrect !== null && (
-        <div className={`mt-5 text-center text-sm font-bold anim-fade-up ${isCorrect ? "text-emerald-400" : "text-red-400"}`}>
-          {isCorrect ? "✓ Correct! Advancing to Level 1." : `✗ Incorrect — the answer was "${word.definition}"`}
+        <div className="mt-5 anim-fade-up text-center">
+          <div className={`text-sm font-bold mb-4 ${isCorrect ? "text-emerald-400" : "text-red-400"}`}>
+            {isCorrect ? "✓ Correct! Advancing to Level 1." : `✗ Incorrect — the answer was "${word.definition}"`}
+          </div>
+          <button onClick={advance}
+            className="px-8 py-3 bg-white/[.08] hover:bg-white/[.14] border border-white/[.12] text-white font-bold text-sm rounded-xl transition-all">
+            Continue &rarr;
+          </button>
         </div>
       )}
     </div>
@@ -1280,7 +1287,6 @@ function QuestionCardType({ word, onCorrect, onWrong, advance }) {
       const res = checkAnswer(input);
       if (res === "correct" || res === "accentWarn") {
         setPhase("correctionDone");
-        setTimeout(advance, 700);
       } else {
         setShaking(true);
         setTimeout(() => setShaking(false), 500);
@@ -1294,11 +1300,9 @@ function QuestionCardType({ word, onCorrect, onWrong, advance }) {
       if (res === "correct") {
         setPhase("correct");
         onCorrect();
-        setTimeout(advance, 900);
       } else {
         setPhase("wrong");
         onWrong();
-        setTimeout(() => { setPhase("correction"); setInput(""); setTimeout(() => inputRef.current?.focus(), 100); }, 1500);
       }
       return;
     }
@@ -1307,7 +1311,6 @@ function QuestionCardType({ word, onCorrect, onWrong, advance }) {
     if (result === "correct") {
       setPhase("correct");
       onCorrect();
-      setTimeout(advance, 900);
     } else if (result === "accentWarn") {
       setPhase("accentWarn");
       setInput("");
@@ -1315,7 +1318,6 @@ function QuestionCardType({ word, onCorrect, onWrong, advance }) {
     } else {
       setPhase("wrong");
       onWrong();
-      setTimeout(() => { setPhase("correction"); setInput(""); setTimeout(() => inputRef.current?.focus(), 100); }, 1500);
     }
   };
 
@@ -1323,7 +1325,14 @@ function QuestionCardType({ word, onCorrect, onWrong, advance }) {
     i === 0 || ch === " " || "/()¡¿!".includes(ch) ? ch : "·"
   ).join("");
 
-  const isLocked = phase === "correct" || phase === "correctionDone";
+  const isLocked = phase === "correct" || phase === "correctionDone" || phase === "wrong";
+
+  /* When wrong, show the answer then let user click to enter correction mode */
+  const enterCorrection = () => {
+    setPhase("correction");
+    setInput("");
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
 
   const inputCls = (() => {
     if (isLocked && phase === "correct") return "bg-emerald-900/20 border-emerald-500/50 text-emerald-300";
@@ -1365,6 +1374,26 @@ function QuestionCardType({ word, onCorrect, onWrong, advance }) {
         <div className="mb-4 px-4 py-3 rounded-xl bg-white/[.04] border border-white/[.08] anim-fade-up">
           <p className="text-white/50 text-sm font-semibold">Got it. This word returns to Multiple Choice.</p>
         </div>
+      )}
+
+      {/* Continue buttons for terminal phases */}
+      {phase === "correct" && (
+        <button onClick={advance}
+          className="w-full mb-4 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition-all">
+          Continue &rarr;
+        </button>
+      )}
+      {phase === "correctionDone" && (
+        <button onClick={advance}
+          className="w-full mb-4 py-3.5 rounded-xl bg-white/[.08] hover:bg-white/[.14] border border-white/[.12] text-white font-bold text-sm transition-all">
+          Continue &rarr;
+        </button>
+      )}
+      {phase === "wrong" && (
+        <button onClick={enterCorrection}
+          className="w-full mb-4 py-3.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-sm transition-all">
+          Type the Correct Answer &rarr;
+        </button>
       )}
 
       <form onSubmit={handleSubmit}>
