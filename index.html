@@ -1186,8 +1186,11 @@ function QuestionCardMC({ word, onCorrect, onWrong, advance }) {
   const [isCorrect, setIsCorrect] = useState(null);
 
   useEffect(() => {
-    const pool = VOCAB.filter(w => w.id !== word.id);
-    const distractors = shuffle(pool).slice(0, 3).map(w => w.definition);
+    // Prefer distractors from the same category; fall back to other categories if needed
+    const sameCat  = shuffle(VOCAB.filter(w => w.id !== word.id && w.cat === word.cat));
+    const otherCat = shuffle(VOCAB.filter(w => w.id !== word.id && w.cat !== word.cat));
+    const distPool = [...sameCat, ...otherCat]; // same-cat first, then fill from others
+    const distractors = distPool.slice(0, 3).map(w => w.definition);
     setOptions(shuffle([word.definition, ...distractors]));
     setPicked(null);
     setIsCorrect(null);
