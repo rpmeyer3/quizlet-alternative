@@ -468,19 +468,19 @@ function AuthProvider({ children }) {
    for guest mode). Upserts after every answer.
    ═══════════════════════════════════════════════════════════════════════ */
 function useProgress(user) {
-  const LOCAL_KEY = "uga_sp2001_v4";
+  // Scope localStorage key per user — guest mode uses a shared key
+  const LOCAL_KEY = user ? `uga_sp2001_v4_${user.id}` : "uga_sp2001_v4_guest";
   const { addToast } = useContext(ToastCtx);
 
-  // ws = { [vocab_item_id]: { level: 0-3, misses: 0 } }
-  const [ws, setWs] = useState(() => {
+  const blankWs = () => {
     const o = {};
     VOCAB.forEach(w => { o[w.id] = { level: 0, misses: 0 }; });
-    try {
-      const d = JSON.parse(localStorage.getItem(LOCAL_KEY));
-      if (d?.v === 4 && d.ws) return d.ws;
-    } catch {}
     return o;
-  });
+  };
+
+  // ws = { [vocab_item_id]: { level: 0-3, misses: 0 } }
+  // Always start blank — data is loaded in effects below
+  const [ws, setWs] = useState(blankWs);
 
   const [loaded, setLoaded] = useState(false);
   const pendingRef = useRef([]);
@@ -496,9 +496,21 @@ function useProgress(user) {
     return () => window.removeEventListener("beforeunload", handler);
   }, []);
 
-  // Load from Supabase when user logs in
+  // Load from Supabase when user logs in; always reset to blank first so
+  // a new account never inherits a previous account's cached data.
   useEffect(() => {
-    if (!user) { setLoaded(true); return; }
+    if (!user) {
+      // Guest: restore from guest-scoped localStorage
+      try {
+        const d = JSON.parse(localStorage.getItem(LOCAL_KEY));
+        if (d?.v === 4 && d.ws) setWs(d.ws);
+      } catch {}
+      setLoaded(true);
+      return;
+    }
+    // Logged-in: reset to blank, then load from Supabase
+    setWs(blankWs());
+    setLoaded(false);
     (async () => {
       try {
         const { data, error } = await supabase
@@ -517,11 +529,16 @@ function useProgress(user) {
         }
       } catch (err) {
         console.error("Failed to load progress:", err);
+        // Try user-scoped localStorage as fallback
+        try {
+          const d = JSON.parse(localStorage.getItem(LOCAL_KEY));
+          if (d?.v === 4 && d.ws) setWs(d.ws);
+        } catch {}
         addToast("Could not load cloud progress. Using local backup.", "warn");
       }
       setLoaded(true);
     })();
-  }, [user]);
+  }, [user?.id]);
 
   // Persist to localStorage on every change (instant backup / guest mode)
   useEffect(() => {
