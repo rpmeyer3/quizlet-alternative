@@ -817,6 +817,7 @@ function AuthPage() {
 function App() {
   const { user, loading: authLoading } = useContext(AuthCtx);
   const [view, setView] = useState("home");
+  const [learnMode, setLearnMode] = useState("learn"); // "learn" | "review"
   const [cats, setCats] = useState(new Set(CATEGORIES));
   const { ws, upd, resetAll, resetCats, loaded: progressLoaded } = useProgress(user);
 
@@ -891,8 +892,8 @@ function App() {
 
       {/* BODY */}
       <div className="flex-1 flex">
-        {view === "home" && <HomePage stats={stats} cats={cats} toggle={toggle} setCats={setCats} setView={setView} resetAll={resetAll} resetCats={resetCats} ws={ws} />}
-        {view === "learn" && <LearningEngine cats={cats} ws={ws} upd={upd} setView={setView} />}
+        {view === "home" && <HomePage stats={stats} cats={cats} toggle={toggle} setCats={setCats} setView={setView} setLearnMode={setLearnMode} resetAll={resetAll} resetCats={resetCats} ws={ws} />}
+        {view === "learn" && <LearningEngine cats={cats} ws={ws} upd={upd} setView={setView} mode={learnMode} />}
         {view === "browse" && <BrowsePage cats={cats} toggle={toggle} setCats={setCats} ws={ws} />}
       </div>
     </div>
@@ -900,7 +901,7 @@ function App() {
 }
 
 /* ═══════════════════════ HOME PAGE ═══════════════════════ */
-function HomePage({ stats, cats, toggle, setCats, setView, resetAll, resetCats, ws }) {
+function HomePage({ stats, cats, toggle, setCats, setView, setLearnMode, resetAll, resetCats, ws }) {
   const [confirmReset, setConfirmReset] = useState(false);
   const pct = stats.total ? Math.round(stats.mastered / stats.total * 100) : 0;
 
@@ -914,10 +915,16 @@ function HomePage({ stats, cats, toggle, setCats, setView, resetAll, resetCats, 
           <p className="text-white/50 text-xs font-semibold tracking-widest uppercase mb-1">UGA Spanish 2001</p>
           <h1 className="text-3xl sm:text-4xl font-black text-white mb-1">¡Vamos a estudiar!</h1>
           <p className="text-white/50 text-sm mb-6">{stats.total} words &middot; {cats.size} categories selected</p>
-          <button onClick={() => setView("learn")} disabled={cats.size === 0}
-            className="group relative px-8 py-3 bg-white text-uga-red font-extrabold rounded-xl hover:bg-white/90 transition shadow-xl shadow-black/30 disabled:opacity-30 disabled:cursor-not-allowed">
-            Start Learning <span className="ml-2 inline-block transition-transform group-hover:translate-x-1">&rarr;</span>
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button onClick={() => { setLearnMode("learn"); setView("learn"); }} disabled={cats.size === 0}
+              className="group relative px-8 py-3 bg-white text-uga-red font-extrabold rounded-xl hover:bg-white/90 transition shadow-xl shadow-black/30 disabled:opacity-30 disabled:cursor-not-allowed">
+              Start Learning <span className="ml-2 inline-block transition-transform group-hover:translate-x-1">&rarr;</span>
+            </button>
+            <button onClick={() => { setLearnMode("review"); setView("learn"); }} disabled={cats.size === 0}
+              className="group px-6 py-3 bg-white/[.08] hover:bg-white/[.14] border border-white/20 text-white font-bold rounded-xl transition disabled:opacity-30 disabled:cursor-not-allowed">
+              Review All <span className="text-white/40 ml-1 text-xs font-normal">({stats.total})</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1027,12 +1034,13 @@ function StatBox({ label, n, total, barCls, numCls }) {
    CORRECTION MODE: Must retype correct answer after a miss.
    PENALTY: Miss Type → drops to Level 0.
    ══════════════════════════════════════════════════════════════════ */
-function LearningEngine({ cats, ws, upd, setView }) {
+function LearningEngine({ cats, ws, upd, setView, mode }) {
   const [queue, setQueue] = useState([]);
   const [idx, setIdx] = useState(0);
   const [round, setRound] = useState(1);
   const [sessionCorrect, setSessionCorrect] = useState(0);
   const [sessionWrong, setSessionWrong] = useState(0);
+  const [reviewDone, setReviewDone] = useState(false);
 
   // Final Quiz mode: activated when all words are mastered
   // fq = null (inactive) | { queue, idx, correct, wrong }
@@ -1052,12 +1060,15 @@ function LearningEngine({ cats, ws, upd, setView }) {
 
   const buildQueue = useCallback((currentWs) => {
     const w = currentWs || ws;
+    if (mode === "review") {
+      return shuffle(VOCAB.filter(v => cats.has(v.cat)));
+    }
     const eligible = VOCAB.filter(v => cats.has(v.cat) && (w[v.id]?.level ?? 0) < 3);
     // Study Gap: Level 1 first, then Level 0
     const l1 = shuffle(eligible.filter(v => (w[v.id]?.level ?? 0) === 1));
     const l0 = shuffle(eligible.filter(v => (w[v.id]?.level ?? 0) === 0));
     return [...l1, ...l0];
-  }, [cats, ws]);
+  }, [cats, ws, mode]);
 
   useEffect(() => {
     const q = buildQueue();
@@ -1066,6 +1077,7 @@ function LearningEngine({ cats, ws, upd, setView }) {
     setRound(1);
     setSessionCorrect(0);
     setSessionWrong(0);
+    setReviewDone(false);
   }, [cats]);
 
   const current = queue[idx];
@@ -1075,17 +1087,34 @@ function LearningEngine({ cats, ws, upd, setView }) {
     if (idx + 1 < queue.length) {
       setIdx(i => i + 1);
     } else {
-      const q = buildQueue(ws);
-      if (q.length === 0) {
+      if (mode === "review") {
+        setReviewDone(true);
         setQueue([]);
         setIdx(0);
       } else {
-        setQueue(q);
-        setIdx(0);
-        setRound(r => r + 1);
+        const q = buildQueue(ws);
+        if (q.length === 0) {
+          setQueue([]);
+          setIdx(0);
+        } else {
+          setQueue(q);
+          setIdx(0);
+          setRound(r => r + 1);
+        }
       }
     }
-  }, [idx, queue.length, buildQueue, ws]);
+  }, [idx, queue.length, buildQueue, ws, mode]);
+
+  const handleSkip = useCallback(() => {
+    if (!current) return;
+    setQueue(prev => {
+      const copy = [...prev];
+      copy.splice(idx, 1);
+      copy.push(current);
+      return copy;
+    });
+    // idx now points to the next item (which slid into position)
+  }, [current, idx]);
 
   const handleCorrect = useCallback((id) => {
     const lvl = ws[id]?.level ?? 0;
@@ -1180,6 +1209,30 @@ function LearningEngine({ cats, ws, upd, setView }) {
     );
   }
 
+  /* ── Review Complete render ── */
+  if (reviewDone) {
+    const total = VOCAB.filter(w => cats.has(w.cat)).length;
+    const pct = total ? Math.round(sessionCorrect / (sessionCorrect + sessionWrong) * 100) : 0;
+    return (
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="text-center anim-scale-in max-w-md">
+          <div className="text-7xl mb-4">{pct >= 80 ? "🌟" : pct >= 50 ? "📖" : "💪"}</div>
+          <h2 className="text-2xl font-black text-white mb-1">Review Complete!</h2>
+          <p className="text-white/40 text-sm mb-5">You reviewed all {total} words.</p>
+          <div className="flex gap-4 justify-center mb-5">
+            <span className="text-emerald-400 font-bold text-sm">{sessionCorrect} correct</span>
+            <span className="text-red-400 font-bold text-sm">{sessionWrong} missed</span>
+          </div>
+          <div className="flex justify-center gap-3 flex-wrap">
+            <button onClick={() => { setReviewDone(false); setQueue(buildQueue()); setIdx(0); setSessionCorrect(0); setSessionWrong(0); }}
+              className="px-6 py-3 bg-uga-red text-white font-bold rounded-xl hover:bg-uga-red-dark transition">Review Again</button>
+            <button onClick={() => setView("home")} className="px-6 py-3 bg-white/[.08] border border-white/[.12] text-white font-bold rounded-xl hover:bg-white/[.14] transition">&larr; Home</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (queue.length === 0 || !current) {
     const allDone = VOCAB.filter(w => cats.has(w.cat)).every(w => (ws[w.id]?.level ?? 0) >= 3);
     return (
@@ -1255,9 +1308,13 @@ function LearningEngine({ cats, ws, upd, setView }) {
         {/* Badges */}
         <div className="mb-5 flex items-center gap-2 flex-wrap justify-center">
           <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-            currentLevel === 0 ? "bg-blue-900/40 text-blue-300 border-blue-700/40" : "bg-amber-900/40 text-amber-300 border-amber-700/40"
+            mode === "review"
+              ? "bg-violet-900/40 text-violet-300 border-violet-700/40"
+              : currentLevel === 0 ? "bg-blue-900/40 text-blue-300 border-blue-700/40" : "bg-amber-900/40 text-amber-300 border-amber-700/40"
           }`}>
-            {currentLevel === 0 ? "Level 0 · Multiple Choice" : "Level 1 · Type the Answer"}
+            {mode === "review"
+              ? (currentLevel === 0 ? "Review · Multiple Choice" : "Review · Type the Answer")
+              : (currentLevel === 0 ? "Level 0 · Multiple Choice" : "Level 1 · Type the Answer")}
           </span>
           <span className={`text-[10px] px-2 py-0.5 rounded-full border ${catStyle.badge}`}>{current.cat}</span>
         </div>
@@ -1274,6 +1331,15 @@ function LearningEngine({ cats, ws, upd, setView }) {
             onWrong={() => handleWrong(current.id)}
             advance={advance} />
         )}
+
+        {/* Skip button */}
+        <div className="w-full max-w-xl mt-4 flex justify-center">
+          <button onClick={handleSkip}
+            className="text-[11px] text-white/15 hover:text-white/40 transition flex items-center gap-1.5">
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
+            Skip (come back later)
+          </button>
+        </div>
 
         {/* Mobile mini bars */}
         <div className="w-full max-w-xl mt-8 grid grid-cols-3 gap-2 lg:hidden">
