@@ -1332,6 +1332,13 @@ function QuestionCardMC({ word, onCorrect, onWrong, advance }) {
     setIsCorrect(null);
   }, [word.id]);
 
+  useEffect(() => {
+    if (isCorrect === null) return;
+    const handler = (e) => { if (e.key === "Enter") advance(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [isCorrect, advance]);
+
   const pick = (opt) => {
     if (picked !== null) return;
     setPicked(opt);
@@ -1393,6 +1400,13 @@ function QuestionCardType({ word, onCorrect, onWrong, advance }) {
     setShaking(false);
     setTimeout(() => inputRef.current?.focus(), 120);
   }, [word.id]);
+
+  useEffect(() => {
+    if (phase !== "correct" && phase !== "correctionDone") return;
+    const handler = (e) => { if (e.key === "Enter") advance(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [phase, advance]);
 
   const correctAnswer = word.term;
 
