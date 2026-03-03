@@ -625,6 +625,27 @@ function useProgress(user) {
     }
   }, [user]);
 
+  const resetCats = useCallback(async (catSet) => {
+    const ids = VOCAB.filter(w => catSet.has(w.cat)).map(w => w.id);
+    if (ids.length === 0) return;
+    setWs(prev => {
+      const next = { ...prev };
+      ids.forEach(id => { next[id] = { level: 0, misses: 0 }; });
+      return next;
+    });
+    if (user) {
+      try {
+        const { error } = await supabase.from("user_progress").delete()
+          .eq("user_id", user.id).in("vocab_item_id", ids);
+        if (error) throw error;
+        addToast(`Progress reset for ${catSet.size} categor${catSet.size === 1 ? "y" : "ies"} (${ids.length} words).`, "success");
+      } catch (err) {
+        console.error("Reset failed:", err);
+        addToast("Reset failed on the server — local progress was cleared.", "error");
+      }
+    }
+  }, [user]);
+
   // Flush remaining progress when tab is closing
   useEffect(() => {
     const handler = () => {
@@ -647,7 +668,7 @@ function useProgress(user) {
     return () => window.removeEventListener("pagehide", handler);
   }, [user]);
 
-  return { ws, upd, resetAll, loaded };
+  return { ws, upd, resetAll, resetCats, loaded };
 }
 
 /* ═══════════════════ TAILWIND CATEGORY COLORS ═══════════════════ */
@@ -797,7 +818,7 @@ function App() {
   const { user, loading: authLoading } = useContext(AuthCtx);
   const [view, setView] = useState("home");
   const [cats, setCats] = useState(new Set(CATEGORIES));
-  const { ws, upd, resetAll, loaded: progressLoaded } = useProgress(user);
+  const { ws, upd, resetAll, resetCats, loaded: progressLoaded } = useProgress(user);
 
   // Show auth page if not logged in
   if (authLoading) {
@@ -870,7 +891,7 @@ function App() {
 
       {/* BODY */}
       <div className="flex-1 flex">
-        {view === "home" && <HomePage stats={stats} cats={cats} toggle={toggle} setCats={setCats} setView={setView} resetAll={resetAll} ws={ws} />}
+        {view === "home" && <HomePage stats={stats} cats={cats} toggle={toggle} setCats={setCats} setView={setView} resetAll={resetAll} resetCats={resetCats} ws={ws} />}
         {view === "learn" && <LearningEngine cats={cats} ws={ws} upd={upd} setView={setView} />}
         {view === "browse" && <BrowsePage cats={cats} toggle={toggle} setCats={setCats} ws={ws} />}
       </div>
@@ -879,7 +900,7 @@ function App() {
 }
 
 /* ═══════════════════════ HOME PAGE ═══════════════════════ */
-function HomePage({ stats, cats, toggle, setCats, setView, resetAll, ws }) {
+function HomePage({ stats, cats, toggle, setCats, setView, resetAll, resetCats, ws }) {
   const [confirmReset, setConfirmReset] = useState(false);
   const pct = stats.total ? Math.round(stats.mastered / stats.total * 100) : 0;
 
@@ -954,15 +975,30 @@ function HomePage({ stats, cats, toggle, setCats, setView, resetAll, ws }) {
         {!confirmReset ? (
           <button onClick={() => setConfirmReset(true)} className="text-[11px] text-white/20 hover:text-uga-red transition flex items-center gap-1.5">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-            Reset all progress
+            Reset progress
           </button>
-        ) : (
-          <div className="flex items-center gap-2 anim-fade-in">
-            <span className="text-xs text-uga-red font-semibold">Erase everything?</span>
-            <button onClick={() => { resetAll(); setConfirmReset(false); }} className="px-3 py-1 bg-uga-red text-white text-[11px] font-bold rounded-lg">Yes</button>
-            <button onClick={() => setConfirmReset(false)} className="px-3 py-1 bg-white/10 text-white text-[11px] rounded-lg">No</button>
-          </div>
-        )}
+        ) : (() => {
+          const selWords = VOCAB.filter(w => cats.has(w.cat));
+          const allWords = VOCAB;
+          return (
+            <div className="flex flex-col items-end gap-2 anim-fade-in">
+              <span className="text-xs text-uga-red font-semibold">Reset which progress?</span>
+              <div className="flex flex-wrap justify-end gap-2">
+                {cats.size > 0 && cats.size < CATEGORIES.length && (
+                  <button onClick={() => { resetCats(cats); setConfirmReset(false); }}
+                    className="px-3 py-1 bg-uga-red text-white text-[11px] font-bold rounded-lg">
+                    Selected only ({selWords.length} words)
+                  </button>
+                )}
+                <button onClick={() => { resetAll(); setConfirmReset(false); }}
+                  className="px-3 py-1 bg-uga-red/80 text-white text-[11px] font-bold rounded-lg">
+                  All ({allWords.length} words)
+                </button>
+                <button onClick={() => setConfirmReset(false)} className="px-3 py-1 bg-white/10 text-white text-[11px] rounded-lg">Cancel</button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
